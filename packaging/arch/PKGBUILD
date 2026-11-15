@@ -8,13 +8,14 @@ arch=('x86_64')
 url='https://github.com/cptn-cosmo/kanzi'
 license=('MIT')
 depends=(
-  'gcc-libs'
+  'libgcc'
+  'libstdc++'
   'glibc'
   'hicolor-icon-theme'
   'libpulse'
   'qt6-base'
   'qt6-declarative'
-  'qt6-wayland'
+  'qt6-wayland'  # runtime platform plugin, not linked
   'qt6-webchannel'
   'qt6-webengine'
 )
@@ -24,7 +25,7 @@ optdepends=(
   'google-chrome: alternative source of the Widevine CDM (AUR)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('f2b8e84aceca20f813f6c10c2590f66bd82bb99636db18b97b8be4c36839bf0c')
 
 build() {
   cmake -S "$pkgname-$pkgver" -B build -G Ninja \
