@@ -36,6 +36,7 @@ The page loads with a `https://music.apple.com/` base URL so that the web player
 - Qt ≥ 6.8 with: Base, Declarative, QuickControls2, WebEngine (built with proprietary codecs, which Arch's build has), WebChannel, Wayland, DBus
 - A Widevine CDM. Kanzi looks for Google Chrome's (`/opt/google/chrome/WidevineCdm/...`) and Chromium's copy. To point it at another one, set `KANZI_WIDEVINE_PATH=/path/to/libwidevinecdm.so`.
 - libpulse (PulseAudio or PipeWire-pulse), used for audio output selection
+- KF6 WindowSystem (optional), for compositor-drawn shadows around the mini player on KDE Plasma
 - An Apple Music subscription for full-length playback
 
 ## Install (Arch Linux)

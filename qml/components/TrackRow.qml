@@ -133,9 +133,10 @@ ItemDelegate {
                     color: Theme.textFaint
                 }
             }
-            Text {
+            LinkText {
                 Layout.fillWidth: true
                 visible: root.showArtist && text !== ""
+                onClicked: Nav.openArtistOf(root.track)
                 text: root.a.artistName || ""
                 color: Theme.textDim
                 elide: Text.ElideRight
@@ -177,5 +178,12 @@ ItemDelegate {
         MenuSeparator {}
         MenuItem { text: qsTr("Play Next"); onTriggered: Nav.queueItem(root.track, true) }
         MenuItem { text: qsTr("Play Later"); onTriggered: Nav.queueItem(root.track, false) }
+        MenuSeparator {}
+        MenuItem { text: qsTr("Go to Artist"); onTriggered: Nav.openArtistOf(root.track) }
+        MenuItem {
+            text: qsTr("Copy Apple Music Link")
+            enabled: Nav.canShare(root.track)
+            onTriggered: Nav.share(root.track)
+        }
     }
 }

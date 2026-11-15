@@ -91,8 +91,9 @@ Rectangle {
                             elide: Text.ElideRight
                             font.weight: row.current ? Font.DemiBold : Font.Normal
                         }
-                        Text {
+                        LinkText {
                             Layout.fillWidth: true
+                            onClicked: Nav.openArtistOf(row.modelData)
                             text: row.modelData.artist
                             color: Theme.textDim
                             elide: Text.ElideRight

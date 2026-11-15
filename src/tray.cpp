@@ -1,6 +1,7 @@
 #include "tray.h"
 
 #include "player.h"
+#include "windowshadow.h"
 
 #include <QApplication>
 #include <QDBusConnection>
@@ -215,4 +216,13 @@ void Tray::updateNowPlaying()
     m_next->setEnabled(has && m_player->canGoNext());
     m_previous->setEnabled(has);
     m_icon->setToolTip(has ? QStringLiteral("Kanzi\n%1 — %2").arg(title, artist) : QStringLiteral("Kanzi"));
+}
+
+bool Tray::setWindowShadow(QWindow *window, int radius, bool on)
+{
+    if (!on) {
+        WindowShadow::remove(window);
+        return false;
+    }
+    return WindowShadow::apply(window, radius);
 }

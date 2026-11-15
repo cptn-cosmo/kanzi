@@ -29,23 +29,64 @@ Flickable {
     function loadCatalog(id) {
         AppleMusic.get(`/v1/catalog/{sf}/artists/${id}`, {
             views: "top-songs," + viewOrder.join(","),
-            extend: "artistBio,editorialArtwork",
-            limit: 20
+            extend: "artistBio,editorialArtwork"
         }, (res, err) => {
+            if (err)
+                return loadSeparately(id, err)
             loading = false
-            if (err) {
-                error = err.message
-                return
-            }
             const r = res.data && res.data.length ? res.data[0] : null
             if (!r)
                 return
             artist = r
-            const views = r.views || {}
-            topSongs = views["top-songs"] ? views["top-songs"].data.slice(0, 10) : []
-            shelves = viewOrder.filter(k => views[k] && views[k].data && views[k].data.length)
-                               .map(k => ({ title: (views[k].attributes && views[k].attributes.title) || k, items: views[k].data }))
+            applyViews(r.views || {})
         })
+    }
+
+    function applyViews(views) {
+        topSongs = views["top-songs"] && views["top-songs"].data ? views["top-songs"].data.slice(0, 10) : []
+        shelves = viewOrder.filter(k => views[k] && views[k].data && views[k].data.length)
+                           .map(k => ({ title: (views[k].attributes && views[k].attributes.title) || viewTitles[k] || k, items: views[k].data }))
+    }
+
+    readonly property var viewTitles: ({
+        "latest-release": qsTr("Latest Release"),
+        "full-albums": qsTr("Albums"),
+        "singles": qsTr("Singles & EPs"),
+        "live-albums": qsTr("Live Albums"),
+        "compilation-albums": qsTr("Compilations"),
+        "appears-on-albums": qsTr("Appears On"),
+        "featured-playlists": qsTr("Playlists"),
+        "similar-artists": qsTr("Similar Artists"),
+    })
+
+    // Fallback when Apple rejects the combined request: fetch the artist and each
+    // section on its own, so one unsupported view or extension can't blank the page.
+    function loadSeparately(id, firstError) {
+        console.warn("Kanzi: artist request failed (" + firstError.message + "); loading sections separately")
+        const views = {}
+        const names = ["top-songs"].concat(viewOrder)
+        let pending = names.length + 1
+        const done = () => {
+            if (--pending === 0)
+                loading = false
+        }
+        AppleMusic.get(`/v1/catalog/{sf}/artists/${id}`, {}, (res, err) => {
+            const r = !err && res.data && res.data.length ? res.data[0] : null
+            if (r)
+                artist = r
+            else if (err)
+                error = err.message
+            done()
+        })
+        for (const name of names) {
+            AppleMusic.get(`/v1/catalog/{sf}/artists/${id}/view/${name}`, {}, (res, err) => {
+                if (!err && res.data && res.data.length) {
+                    views[name] = { data: res.data, attributes: res.attributes || (res.meta && res.meta.attributes) || {} }
+                    applyViews(views)
+                }
+                done()
+            })
+        }
     }
 
     function load() {
@@ -181,10 +222,13 @@ Flickable {
             running: root.loading
         }
         Text {
+            Layout.fillWidth: true
             Layout.leftMargin: Theme.gutter
+            Layout.rightMargin: Theme.gutter
             visible: root.error !== ""
             text: root.error
             color: Theme.textDim
+            wrapMode: Text.Wrap
         }
 
         // ---- top songs ----

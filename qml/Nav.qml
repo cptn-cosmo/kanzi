@@ -138,4 +138,71 @@ QtObject {
             return playItem(item)
         }
     }
+
+    // ---- artist links & sharing ----
+    // These accept API resources as well as Player.nowPlaying / queue entries.
+
+    function catalogIdOf(item) {
+        if (!item)
+            return ""
+        if (item.catalogId)
+            return String(item.catalogId)
+        const pp = attrs(item).playParams || {}
+        if (pp.catalogId)
+            return String(pp.catalogId)
+        if (pp.globalId)
+            return String(pp.globalId) // library playlists shared from the catalog
+        const id = String(item.id || "")
+        return !isLibrary(item) && /^(\d+|pl\.[\w-]+|ra\.[\w-]+)$/.test(id) ? id : ""
+    }
+
+    function shareUrlOf(item) {
+        if (!item)
+            return ""
+        const a = attrs(item)
+        if (a.url)
+            return a.url
+        if (item.url)
+            return item.url
+        const id = catalogIdOf(item)
+        if (!id)
+            return ""
+        const t = typeOf(item).replace("library-", "")
+        const path = ({ albums: "album", playlists: "playlist", artists: "artist", stations: "station" })[t] || "song"
+        return `https://music.apple.com/${AppleMusic.storefront || "us"}/${path}/${id}`
+    }
+
+    function share(item) {
+        const url = shareUrlOf(item)
+        if (!url)
+            return toast(qsTr("This isn't on Apple Music, so there's no link to share"))
+        AppleMusic.copyToClipboard(url)
+        toast(qsTr("Link copied to clipboard"))
+    }
+
+    function canShare(item) { return shareUrlOf(item) !== "" }
+
+    // Opens the (first) artist of a song or album, looking it up when the item doesn't carry it.
+    function openArtistOf(item) {
+        if (!item)
+            return
+        const rel = item.relationships
+        if (rel && rel.artists && rel.artists.data && rel.artists.data.length)
+            return openItem(rel.artists.data[0])
+        let t = typeOf(item).replace("library-", "")
+        if (t !== "albums" && t !== "music-videos")
+            t = "songs"
+        const id = catalogIdOf(item)
+        const path = id ? `/v1/catalog/{sf}/${t}/${id}/artists`
+                   : item.id ? `/v1/me/library/${t}/${item.id}/artists` : ""
+        if (!path)
+            return
+        AppleMusic.get(path, {}, (res, err) => {
+            const found = !err && res.data ? res.data : []
+            if (found.length)
+                openItem(found[0])
+            else
+                toast(qsTr("Couldn't find this artist on Apple Music"))
+        })
+    }
 }

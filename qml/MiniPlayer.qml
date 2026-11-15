@@ -34,7 +34,14 @@ Window {
             Tray.setKeepAbove(title, Tray.miniPlayerOnTop)
     }
     Timer { id: keepAboveTimer; interval: 250; onTriggered: win.applyKeepAbove() }
-    onVisibleChanged: if (visible) keepAboveTimer.restart()
+    // A compositor-drawn shadow, like a decorated window gets. Re-applied on every
+    // show because Wayland gives the window a fresh surface each time.
+    onVisibleChanged: {
+        if (visible) {
+            Tray.setWindowShadow(win, Theme.radiusLarge, true)
+            keepAboveTimer.restart()
+        }
+    }
     Connections {
         target: Tray
         function onSettingsChanged() { keepAboveTimer.restart() }
@@ -127,6 +134,14 @@ Window {
             }
             Item { Layout.fillWidth: true }
             IconButton {
+                iconName: "share"
+                iconSize: 15
+                color: "white"
+                tip: qsTr("Copy Apple Music link")
+                visible: Player.hasTrack && Nav.canShare(win.np)
+                onClicked: Nav.share(win.np)
+            }
+            IconButton {
                 iconName: "queue"
                 iconSize: 16
                 color: "white"
@@ -158,9 +173,10 @@ Window {
                 font.weight: Font.Bold
                 elide: Text.ElideRight
             }
-            Text {
+            LinkText {
                 Layout.fillWidth: true
                 visible: Player.hasTrack
+                onClicked: { win.expandRequested(); Nav.openArtistOf(win.np) }
                 text: win.np.artist || ""
                 color: Qt.rgba(1, 1, 1, 0.75)
                 font.pixelSize: 13
@@ -248,6 +264,43 @@ Window {
                 grabPermissions: PointerHandler.CanTakeOverFromAnything
                 onActiveChanged: if (active) win.startSystemResize(Qt.RightEdge | Qt.BottomEdge)
             }
+        }
+    }
+
+    Rectangle {
+        id: miniToast
+        property string message
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 44
+        width: Math.min(parent.width - 24, miniToastText.implicitWidth + 20)
+        height: miniToastText.implicitHeight + 10
+        radius: height / 2
+        color: Qt.rgba(0, 0, 0, 0.75)
+        opacity: 0
+        Text {
+            id: miniToastText
+            anchors.centerIn: parent
+            width: parent.width - 20
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            text: miniToast.message
+            color: "white"
+            font.pixelSize: 12
+        }
+        SequentialAnimation {
+            id: miniToastAnim
+            NumberAnimation { target: miniToast; property: "opacity"; to: 1; duration: 120 }
+            PauseAnimation { duration: 1600 }
+            NumberAnimation { target: miniToast; property: "opacity"; to: 0; duration: 250 }
+        }
+    }
+    Connections {
+        target: Nav
+        enabled: win.visible
+        function onToast(message) {
+            miniToast.message = message
+            miniToastAnim.restart()
         }
     }
 

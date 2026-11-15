@@ -27,12 +27,11 @@ Item {
     }
 
     // Apple's web player gets lyrics from amp-api; the public API host doesn't
-    // serve them to the web token. Line-synced first (that's what we display),
+    // serve them to the web token (it answers 40012). Line-synced first (that's what we display),
     // word-synced ("syllable") as a fallback for songs that only have that.
     readonly property var sources: [
         "https://amp-api.music.apple.com/v1/catalog/{sf}/songs/%1/lyrics",
         "https://amp-api.music.apple.com/v1/catalog/{sf}/songs/%1/syllable-lyrics",
-        "/v1/catalog/{sf}/songs/%1/lyrics",
     ]
 
     function load() {

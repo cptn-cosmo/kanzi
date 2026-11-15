@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QQmlEngine>
+#include <QWindow>
 
 class Player;
 class QAction;
@@ -49,6 +50,8 @@ public:
     // Sets KWin's "keep above" on this process's window titled `caption`.
     // Wayland gives clients no way to do this themselves; KWin scripting can.
     Q_INVOKABLE void setKeepAbove(const QString &caption, bool on);
+    // Compositor-drawn shadow around a frameless, rounded window (KWin; no-op elsewhere).
+    Q_INVOKABLE bool setWindowShadow(QWindow *window, int radius, bool on);
 
 signals:
     void settingsChanged();

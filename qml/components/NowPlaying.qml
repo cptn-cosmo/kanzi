@@ -111,13 +111,35 @@ Item {
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                     }
-                    Text {
+                    RowLayout {
                         Layout.fillWidth: true
-                        text: [root.np.artist, root.np.album].filter(s => !!s).join(" — ")
-                        color: Qt.rgba(1, 1, 1, 0.7)
-                        font.pixelSize: Theme.fontLarge
-                        elide: Text.ElideRight
+                        spacing: 0
+                        LinkText {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            text: root.np.artist || ""
+                            color: Qt.rgba(1, 1, 1, 0.7)
+                            font.pixelSize: Theme.fontLarge
+                            elide: Text.ElideRight
+                            onClicked: Nav.openArtistOf(root.np)
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: !!root.np.album
+                            text: (root.np.artist ? " — " : "") + (root.np.album || "")
+                            color: Qt.rgba(1, 1, 1, 0.7)
+                            font.pixelSize: Theme.fontLarge
+                            elide: Text.ElideRight
+                        }
                     }
+                }
+                IconButton {
+                    iconName: "share"
+                    iconSize: 20
+                    color: "white"
+                    tip: qsTr("Copy Apple Music link")
+                    enabled: Nav.canShare(root.np)
+                    onClicked: Nav.share(root.np)
                 }
             }
 
@@ -269,7 +291,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 1
                             Text { Layout.fillWidth: true; text: qrow.modelData.title; color: "white"; elide: Text.ElideRight; font.weight: Font.DemiBold }
-                            Text { Layout.fillWidth: true; text: qrow.modelData.artist; color: Qt.rgba(1, 1, 1, 0.65); elide: Text.ElideRight; font.pixelSize: Theme.fontSmall }
+                            LinkText { Layout.fillWidth: true; text: qrow.modelData.artist; color: Qt.rgba(1, 1, 1, 0.65); elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; onClicked: Nav.openArtistOf(qrow.modelData) }
                         }
                         Text { text: Theme.formatTime(qrow.modelData.duration); color: Qt.rgba(1, 1, 1, 0.55); font.pixelSize: Theme.fontSmall }
                     }

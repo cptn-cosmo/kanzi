@@ -76,9 +76,12 @@ Item {
             font.weight: Font.Medium
             horizontalAlignment: root.isArtist ? Text.AlignHCenter : Text.AlignLeft
         }
-        Text {
+        LinkText {
             Layout.fillWidth: true
             visible: !root.isArtist && text !== ""
+            // Albums and songs link to their artist; curators and labels don't.
+            linkEnabled: (root.type === "albums" || root.type === "songs") && !!Nav.attrs(root.item).artistName
+            onClicked: Nav.openArtistOf(root.item)
             text: Nav.subtitleOf(root.item)
             color: Theme.textDim
             elide: Text.ElideRight
@@ -93,7 +96,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         z: -1
         onClicked: mouseEvent => {
-            if (mouseEvent.button === Qt.RightButton && root.playable)
+            if (mouseEvent.button === Qt.RightButton && (root.playable || Nav.canShare(root.item)))
                 menu.popup()
             else if (mouseEvent.button === Qt.LeftButton)
                 Nav.canOpen(root.item) ? Nav.openItem(root.item) : Nav.playItem(root.item)
@@ -111,5 +114,13 @@ Item {
         MenuSeparator {}
         MenuItem { text: qsTr("Play Next"); onTriggered: Nav.queueItem(root.item, true) }
         MenuItem { text: qsTr("Play Later"); onTriggered: Nav.queueItem(root.item, false) }
+        MenuSeparator { visible: shareItem.visible }
+        MenuItem {
+            id: shareItem
+            text: qsTr("Copy Apple Music Link")
+            visible: Nav.canShare(root.item)
+            height: visible ? implicitHeight : 0
+            onTriggered: Nav.share(root.item)
+        }
     }
 }

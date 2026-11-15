@@ -143,7 +143,7 @@ ListView {
                         maximumLineCount: 2
                         elide: Text.ElideRight
                     }
-                    Text {
+                    LinkText {
                         Layout.fillWidth: true
                         text: root.a.artistName || root.a.curatorName || ""
                         visible: text !== ""
@@ -151,17 +151,8 @@ ListView {
                         font.pixelSize: Theme.fontLarge + 2
                         font.weight: Font.Medium
                         elide: Text.ElideRight
-                        HoverHandler { id: artistHover; enabled: root.isAlbum; cursorShape: Qt.PointingHandCursor }
-                        font.underline: artistHover.hovered
-                        TapHandler {
-                            enabled: root.isAlbum
-                            onTapped: {
-                                const rel = root.resource && root.resource.relationships
-                                const artists = rel && rel.artists ? rel.artists.data : []
-                                if (artists && artists.length)
-                                    Nav.openItem(artists[0])
-                            }
-                        }
+                        linkEnabled: root.isAlbum && !!root.resource
+                        onClicked: Nav.openArtistOf(root.resource)
                     }
                     Text {
                         Layout.fillWidth: true
@@ -218,6 +209,12 @@ ListView {
                                 id: collectionMenu
                                 MenuItem { text: qsTr("Play Next"); onTriggered: Nav.queueItem(root.resource, true) }
                                 MenuItem { text: qsTr("Play Later"); onTriggered: Nav.queueItem(root.resource, false) }
+                                MenuSeparator {}
+                                MenuItem {
+                                    text: qsTr("Copy Apple Music Link")
+                                    enabled: Nav.canShare(root.resource)
+                                    onTriggered: Nav.share(root.resource)
+                                }
                             }
                         }
                     }

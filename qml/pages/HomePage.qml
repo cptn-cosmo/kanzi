@@ -31,12 +31,12 @@ ListView {
             return
         pending = 3
         error = ""
-        AppleMusic.get("/v1/me/recent/played", { limit: 20 }, (res, err) => {
+        AppleMusic.get("/v1/me/recent/played", { limit: 10 }, (res, err) => {
             pending--
             if (!err) recentlyPlayed = res.data || []
             else error = err.message
         })
-        AppleMusic.get("/v1/me/history/heavy-rotation", { limit: 20 }, (res, err) => {
+        AppleMusic.get("/v1/me/history/heavy-rotation", { limit: 10 }, (res, err) => {
             pending--
             if (!err) heavyRotation = res.data || []
         })

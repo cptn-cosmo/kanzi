@@ -63,12 +63,26 @@ Rectangle {
                     font.pixelSize: Theme.fontBody
                     font.weight: Font.DemiBold
                 }
-                Text {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: [root.np.artist, root.np.album].filter(s => !!s).join(" — ")
-                    color: Theme.textDim
-                    elide: Text.ElideRight
-                    font.pixelSize: Theme.fontSmall + 1
+                    spacing: 0
+                    LinkText {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
+                        text: root.np.artist || ""
+                        color: Theme.textDim
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.fontSmall + 1
+                        onClicked: Nav.openArtistOf(root.np)
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !!root.np.album
+                        text: (root.np.artist ? " — " : "") + (root.np.album || "")
+                        color: Theme.textDim
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.fontSmall + 1
+                    }
                 }
             }
 
@@ -178,6 +192,14 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
+            IconButton {
+                iconName: "share"
+                iconSize: 17
+                color: Theme.textDim
+                tip: qsTr("Copy Apple Music link")
+                enabled: Player.hasTrack && Nav.canShare(root.np)
+                onClicked: Nav.share(root.np)
+            }
             IconButton {
                 iconName: "miniPlayer"
                 iconSize: 18

@@ -64,6 +64,7 @@ public:
     Q_INVOKABLE void setDeveloperTokenOverride(const QString &token);
     Q_INVOKABLE QString developerTokenOverride() const;
     Q_INVOKABLE void signOut();
+    Q_INVOKABLE void copyToClipboard(const QString &text) const;
 
     void setUserToken(const QString &token);
 

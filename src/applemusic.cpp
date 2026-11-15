@@ -1,7 +1,9 @@
 #include "applemusic.h"
 
+#include <QClipboard>
 #include <QDateTime>
 #include <QDebug>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -353,9 +355,17 @@ void AppleMusic::request(const QString &method, const QString &path, const QVari
                 result = m_engine->toScriptValue(doc.toVariant());
         }
         if (reply->error() != QNetworkReply::NoError || code >= 400) {
-            qWarning().noquote() << "Kanzi API:" << code << reply->request().url().toString(QUrl::RemoveQuery)
-                                 << reply->errorString() << QString::fromUtf8(data.left(300));
+            if (code != 404 || qEnvironmentVariableIsSet("KANZI_DEBUG"))
+                qWarning().noquote() << "Kanzi API:" << code << reply->request().url().toString(QUrl::RemoveQuery)
+                                     << reply->errorString() << QString::fromUtf8(data.left(300));
             QString msg = reply->errorString();
+            const QJsonArray errors = QJsonDocument::fromJson(data).object().value(u"errors").toArray();
+            if (!errors.isEmpty()) {
+                const QJsonObject e = errors.first().toObject();
+                const QString detail = e.value(u"detail").toString(e.value(u"title").toString());
+                if (!detail.isEmpty())
+                    msg = tr("Apple Music: %1").arg(detail);
+            }
             if (code == 401)
                 msg = tr("Not authorized");
             else if (code == 403)
@@ -374,6 +384,11 @@ void AppleMusic::request(const QString &method, const QString &path, const QVari
             qWarning().noquote() << "Kanzi: error in API callback for" << reply->request().url().path() << "-"
                                  << ret.toString() << ret.property(QStringLiteral("stack")).toString();
     });
+}
+
+void AppleMusic::copyToClipboard(const QString &text) const
+{
+    QGuiApplication::clipboard()->setText(text);
 }
 
 QString AppleMusic::artworkUrl(const QVariant &artwork, int size) const

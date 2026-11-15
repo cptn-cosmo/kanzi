@@ -146,10 +146,45 @@ function resetFade() {
     fade.loudSeen = false;
 }
 
+// Songs blocked by the account's content restrictions (e.g. explicit content
+// with an age limit) can't be played at all; step over them.
+function isRestricted(e) {
+    return !!e && /CONTENT_RESTRICTED/.test(String(e.errorCode || "") + " " + String(e.name || "") + " " + String(e.message || ""));
+}
+
+function reportRestricted() {
+    const item = music.nowPlayingItem;
+    const title = item ? ((item.attributes && item.attributes.name) || item.title || "") : "";
+    const text = title ? `Skipped “${title}”: blocked by your Apple ID's content restrictions`
+                       : "Skipped a song blocked by your Apple ID's content restrictions";
+    console.warn(text);
+    if (bridge) bridge.jsError(text);
+}
+
+let skipping = false;
+async function skipForward(label) {
+    if (skipping) return;
+    skipping = true;
+    try {
+        for (let tries = 0; ; ++tries) {
+            try {
+                await music.skipToNextItem();
+                return;
+            } catch (e) {
+                if (!isRestricted(e)) return fail(label, e);
+                reportRestricted();
+                if (tries >= 5 || !hasNextItem()) return;
+            }
+        }
+    } finally {
+        skipping = false;
+    }
+}
+
 async function advance() {
     if (fade.advancing) return;
     fade.advancing = true;
-    try { await music.skipToNextItem(); } catch (e) { fail("Transition failed", e); }
+    await skipForward("Transition failed");
     fade.advancing = false;
 }
 
@@ -239,7 +274,13 @@ async function onCommand(name, args) {
             opts.startPlaying = true;
             if (args.startIndex > 0) opts.startWith = args.startIndex;
             await music.setQueue(opts);
-            if (music.playbackState !== MusicKit.PlaybackStates.playing) await music.play();
+            try {
+                if (music.playbackState !== MusicKit.PlaybackStates.playing) await music.play();
+            } catch (e) {
+                if (!isRestricted(e)) throw e;
+                reportRestricted();
+                if (hasNextItem()) await skipForward("setQueue failed");
+            }
             break;
         }
         case "playNext":
@@ -253,7 +294,7 @@ async function onCommand(name, args) {
             break;
         case "play": await music.play(); break;
         case "pause": music.pause(); break;
-        case "next": await music.skipToNextItem(); break;
+        case "next": await skipForward("next failed"); break;
         case "previous": await music.skipToPreviousItem(); break;
         case "seek": await music.seekToTime(args.time); break;
         case "volume": music.volume = args.value; break;
@@ -312,7 +353,13 @@ async function startMusicKit() {
     music.addEventListener(E.authorizationStatusDidChange, pushToken);
     if (E.repeatModeDidChange) music.addEventListener(E.repeatModeDidChange, pushModes);
     if (E.shuffleModeDidChange) music.addEventListener(E.shuffleModeDidChange, pushModes);
-    music.addEventListener(E.mediaPlaybackError, (e) => fail("Playback error", e));
+    music.addEventListener(E.mediaPlaybackError, (e) => {
+        if (!isRestricted(e)) return fail("Playback error", e);
+        // Reached on its own (no crossfade); our own skips report and retry themselves.
+        if (skipping) return;
+        reportRestricted();
+        if (hasNextItem()) skipForward("Playback error");
+    });
 
     pushToken();
     pushModes();

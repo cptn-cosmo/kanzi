@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Kanzi VERSION 0.2.0 LANGUAGES CXX)
+project(Kanzi VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,9 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+
+# Optional: compositor-drawn shadows for the frameless mini player.
+find_package(KF6WindowSystem 6.0 QUIET)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -23,6 +26,7 @@ qt_add_executable(kanzi
     src/audiooutput.h src/audiooutput.cpp
     src/tray.h src/tray.cpp
     src/discordpresence.h src/discordpresence.cpp
+    src/windowshadow.h src/windowshadow.cpp
 )
 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -56,6 +60,7 @@ qt_add_qml_module(kanzi
         qml/components/PageHeader.qml
         qml/components/MediaGrid.qml
         qml/components/Spinner.qml
+        qml/components/LinkText.qml
         qml/pages/HomePage.qml
         qml/pages/BrowsePage.qml
         qml/pages/RecentPage.qml
@@ -78,6 +83,14 @@ target_link_libraries(kanzi PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Network
     Qt6::DBus Qt6::WebEngineQuick Qt6::WebChannel Qt6::WebChannelQuick
     PkgConfig::PULSE)
+
+if(KF6WindowSystem_FOUND)
+    target_link_libraries(kanzi PRIVATE KF6::WindowSystem)
+    target_compile_definitions(kanzi PRIVATE KANZI_HAVE_KWINDOWSYSTEM)
+    message(STATUS "KWindowSystem found: native window shadows enabled")
+else()
+    message(STATUS "KWindowSystem not found: mini player will have no compositor shadow")
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS kanzi RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
