@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kanzi Player</title>
+<!--
+  Hidden MusicKit JS host. Loaded with a https://music.apple.com base URL so the
+  web player's developer token and CORS rules accept it. All UI is native QML;
+  this page only decodes (Widevine-protected) audio and reports state back over
+  the Qt WebChannel object `bridge` (the C++ Player).
+-->
+<script>/*QWEBCHANNEL_JS*/</script>
+<script>
+"use strict";
+const DEVELOPER_TOKEN = "%DEVELOPER_TOKEN%";
+const STORED_USER_TOKEN = "%USER_TOKEN%";
+const APP_VERSION = "%VERSION%";
+const INITIAL_VOLUME = %VOLUME%;
+
+let bridge = null;
+let music = null;
+
+function log(...args) {
+    console.log(...args);
+    if (bridge) bridge.jsLog(args.map(String).join(" "));
+}
+function fail(msg, e) {
+    const text = msg + (e ? ": " + (e.message || e.description || e.errorCode || String(e)) : "");
+    console.error(text, e);
+    if (bridge) bridge.jsError(text);
+}
+
+function catalogIdOf(item) {
+    const pp = item.playParams || (item.attributes && item.attributes.playParams) || {};
+    if (pp.catalogId) return String(pp.catalogId);
+    if (/^\d+$/.test(String(item.id))) return String(item.id);
+    return "";
+}
+
+function mapItem(item) {
+    if (!item) return {};
+    const a = item.attributes || {};
+    return {
+        id: String(item.id || ""),
+        catalogId: catalogIdOf(item),
+        type: item.type || "",
+        title: a.name || item.title || "",
+        artist: a.artistName || item.artistName || "",
+        album: a.albumName || item.albumName || "",
+        artwork: (a.artwork && a.artwork.url) || (item.artwork && item.artwork.url) || "",
+        artworkColor: (a.artwork && a.artwork.bgColor) || "",
+        duration: (a.durationInMillis || item.playbackDuration || 0) / 1000,
+        explicit: a.contentRating === "explicit",
+        hasLyrics: !!a.hasLyrics,
+        url: a.url || "",
+    };
+}
+
+function pushState() { bridge.jsState(music.playbackState); }
+function pushTime() { bridge.jsTime(music.currentPlaybackTime || 0, music.currentPlaybackDuration || 0); }
+function pushNowPlaying() { bridge.jsNowPlaying(mapItem(music.nowPlayingItem)); }
+function pushModes() { bridge.jsModes(music.shuffleMode === 1, music.repeatMode); }
+function pushQueue() {
+    const q = music.queue;
+    bridge.jsQueue(q ? q.items.map(mapItem) : [], q ? q.position : -1);
+}
+function pushToken() { bridge.jsUserToken(music.isAuthorized ? (music.musicUserToken || "") : ""); }
+
+function descriptor(type, id) {
+    const d = {};
+    d[type] = id;
+    return d;
+}
+
+async function onCommand(name, args) {
+    if (!music && name !== "unauthorize") return;
+    try {
+        switch (name) {
+        case "setQueue": {
+            if (args.shuffle) music.shuffleMode = 1;
+            else if (music.shuffleMode === 1 && args.startIndex > 0) music.shuffleMode = 0;
+            const opts = descriptor(args.type, args.id);
+            opts.startPlaying = true;
+            if (args.startIndex > 0) opts.startWith = args.startIndex;
+            await music.setQueue(opts);
+            if (music.playbackState !== MusicKit.PlaybackStates.playing) await music.play();
+            break;
+        }
+        case "playNext":
+            await music.playNext(descriptor(args.type, args.id));
+            break;
+        case "playLater":
+            await music.playLater(descriptor(args.type, args.id));
+            break;
+        case "jumpTo":
+            await music.changeToMediaAtIndex(args.index);
+            break;
+        case "play": await music.play(); break;
+        case "pause": music.pause(); break;
+        case "next": await music.skipToNextItem(); break;
+        case "previous": await music.skipToPreviousItem(); break;
+        case "seek": await music.seekToTime(args.time); break;
+        case "volume": music.volume = args.value; break;
+        case "shuffle": music.shuffleMode = args.value ? 1 : 0; pushModes(); break;
+        case "repeat": music.repeatMode = args.value; pushModes(); break;
+        case "authorize": {
+            const token = await music.authorize();
+            bridge.jsUserToken(token || "");
+            break;
+        }
+        case "unauthorize":
+            if (music) await music.unauthorize();
+            bridge.jsUserToken("");
+            break;
+        default:
+            log("unknown command", name);
+        }
+    } catch (e) {
+        fail(name + " failed", e);
+    }
+}
+
+async function startMusicKit() {
+    try {
+        music = await MusicKit.configure({
+            developerToken: DEVELOPER_TOKEN,
+            app: { name: "Kanzi", build: APP_VERSION },
+        });
+    } catch (e) {
+        fail("MusicKit could not be configured", e);
+        return;
+    }
+
+    // Carry a token we already know about into a fresh MusicKit store.
+    if (!music.isAuthorized && STORED_USER_TOKEN) {
+        try { music.musicUserToken = STORED_USER_TOKEN; } catch (e) { /* read-only in some builds */ }
+    }
+
+    music.volume = INITIAL_VOLUME;
+    const E = MusicKit.Events;
+    music.addEventListener(E.playbackStateDidChange, pushState);
+    music.addEventListener(E.playbackTimeDidChange, pushTime);
+    music.addEventListener(E.playbackDurationDidChange, pushTime);
+    music.addEventListener(E.nowPlayingItemDidChange, () => { pushNowPlaying(); pushQueue(); });
+    music.addEventListener(E.queueItemsDidChange, pushQueue);
+    music.addEventListener(E.queuePositionDidChange, pushQueue);
+    music.addEventListener(E.playbackVolumeDidChange, () => bridge.jsVolume(music.volume));
+    music.addEventListener(E.authorizationStatusDidChange, pushToken);
+    if (E.repeatModeDidChange) music.addEventListener(E.repeatModeDidChange, pushModes);
+    if (E.shuffleModeDidChange) music.addEventListener(E.shuffleModeDidChange, pushModes);
+    music.addEventListener(E.mediaPlaybackError, (e) => fail("Playback error", e));
+
+    pushToken();
+    pushModes();
+    pushState();
+    pushNowPlaying();
+    pushQueue();
+    bridge.jsReady();
+    log("MusicKit", MusicKit.version, "ready; authorized:", music.isAuthorized);
+}
+
+document.addEventListener("musickitloaded", startMusicKit);
+
+new QWebChannel(qt.webChannelTransport, (channel) => {
+    bridge = channel.objects.bridge;
+    bridge.command.connect(onCommand);
+    if (!DEVELOPER_TOKEN) {
+        fail("No developer token");
+        return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://js-cdn.music.apple.com/musickit/v3/musickit.js";
+    s.setAttribute("data-web-components", "");
+    s.onerror = () => fail("Could not load MusicKit JS (offline?)");
+    document.head.appendChild(s);
+});
+</script>
+</head>
+<body></body>
+</html>

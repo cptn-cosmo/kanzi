@@ -1,0 +1,141 @@
+pragma Singleton
+import QtQuick
+import QtQuick.Controls
+import Kanzi
+
+// App-wide navigation state and helpers for turning API resources into actions.
+QtObject {
+    id: nav
+
+    property var stack: null
+    property string section: "home"
+    property string searchTerm: ""
+    property bool nowPlayingOpen: false
+    property bool queueOpen: false
+    property bool lyricsOpen: true
+    property bool miniPlayerOpen: false
+
+    signal toast(string message)
+    signal focusSearch()
+
+    readonly property var sections: ({
+        home: "pages/HomePage.qml",
+        browse: "pages/BrowsePage.qml",
+        recent: "pages/RecentPage.qml",
+        search: "pages/SearchPage.qml",
+        albums: "pages/LibraryGridPage.qml",
+        artists: "pages/LibraryGridPage.qml",
+        playlists: "pages/LibraryGridPage.qml",
+        songs: "pages/LibrarySongsPage.qml",
+        welcome: "pages/WelcomePage.qml",
+        settings: "pages/SettingsPage.qml",
+    })
+
+    function show(key, props) {
+        if (!stack)
+            return
+        section = key
+        nowPlayingOpen = false
+        const p = props || {}
+        if (key === "albums" || key === "artists" || key === "playlists")
+            p.kind = key
+        stack.replace(null, Qt.resolvedUrl(sections[key]), p, StackView.Immediate)
+    }
+
+    function push(page, props) {
+        nowPlayingOpen = false
+        stack.push(Qt.resolvedUrl(page), props || {})
+    }
+
+    function back() {
+        if (stack && stack.depth > 1)
+            stack.pop()
+    }
+
+    function search(term) {
+        searchTerm = term
+        if (section !== "search" || stack.depth > 1)
+            show("search")
+    }
+
+    // ---- resource helpers ----
+
+    function typeOf(item) { return item && item.type ? item.type : "" }
+    function isLibrary(item) { return typeOf(item).startsWith("library-") }
+    function attrs(item) { return item && item.attributes ? item.attributes : {} }
+    function titleOf(item) { return attrs(item).name || "" }
+
+    function artworkOf(item) {
+        const a = attrs(item)
+        if (a.artwork)
+            return a.artwork
+        // Library artists carry their picture on the catalog relationship.
+        const rel = item && item.relationships
+        if (rel && rel.catalog && rel.catalog.data && rel.catalog.data.length)
+            return attrs(rel.catalog.data[0]).artwork || null
+        return null
+    }
+
+    function subtitleOf(item) {
+        const a = attrs(item)
+        const t = typeOf(item).replace("library-", "")
+        if (a.artistName)
+            return a.artistName
+        if (a.curatorName)
+            return a.curatorName
+        if (t === "playlists")
+            return qsTr("Playlist")
+        if (t === "stations")
+            return qsTr("Station")
+        if (t === "artists")
+            return qsTr("Artist")
+        return ""
+    }
+
+    // The MusicKit queue descriptor key for a resource, or "" when it isn't playable.
+    function playKind(item) {
+        const t = typeOf(item).replace("library-", "")
+        return ({ albums: "album", playlists: "playlist", songs: "song", stations: "station" })[t] || ""
+    }
+
+    function canOpen(item) {
+        const t = typeOf(item).replace("library-", "")
+        return t === "albums" || t === "playlists" || t === "artists"
+    }
+
+    function playItem(item, shuffle) {
+        const kind = playKind(item)
+        if (!kind)
+            return openItem(item)
+        if (!Player.ready)
+            return toast(qsTr("The player is still starting…"))
+        Player.playCollection(kind, item.id, 0, !!shuffle)
+    }
+
+    function queueItem(item, next) {
+        const kind = playKind(item)
+        if (!kind)
+            return
+        if (next)
+            Player.playNext(kind, item.id)
+        else
+            Player.playLater(kind, item.id)
+        toast(next ? qsTr("Playing next: %1").arg(titleOf(item)) : qsTr("Added to queue: %1").arg(titleOf(item)))
+    }
+
+    function openItem(item) {
+        const t = typeOf(item)
+        const library = isLibrary(item)
+        switch (t.replace("library-", "")) {
+        case "albums":
+            return push("pages/CollectionPage.qml", { kind: "album", itemId: item.id, library: library, preview: item })
+        case "playlists":
+            return push("pages/CollectionPage.qml", { kind: "playlist", itemId: item.id, library: library, preview: item })
+        case "artists":
+            return push("pages/ArtistPage.qml", { itemId: item.id, library: library, preview: item })
+        case "songs":
+        case "stations":
+            return playItem(item)
+        }
+    }
+}

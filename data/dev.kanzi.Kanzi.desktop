@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Kanzi
+GenericName=Music Player
+Comment=Native Apple Music client
+Exec=kanzi
+Icon=dev.kanzi.Kanzi
+Terminal=false
+Categories=AudioVideo;Audio;Music;Player;Qt;
+Keywords=apple;music;streaming;itunes;
+StartupWMClass=dev.kanzi.Kanzi
+SingleMainWindow=true

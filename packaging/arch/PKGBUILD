@@ -1,0 +1,40 @@
+# Maintainer: cptn-cosmo <https://github.com/cptn-cosmo>
+
+pkgname=kanzi
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Modern, native Qt 6 / Wayland Apple Music client'
+arch=('x86_64')
+url='https://github.com/cptn-cosmo/kanzi'
+license=('MIT')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'hicolor-icon-theme'
+  'libpulse'
+  'qt6-base'
+  'qt6-declarative'
+  'qt6-wayland'
+  'qt6-webchannel'
+  'qt6-webengine'
+)
+makedepends=('cmake' 'ninja')
+optdepends=(
+  'widevine: Widevine CDM required for playback (AUR)'
+  'google-chrome: alternative source of the Widevine CDM (AUR)'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cmake -S "$pkgname-$pkgver" -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -Wno-dev
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$pkgname-$pkgver/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/"
+}
