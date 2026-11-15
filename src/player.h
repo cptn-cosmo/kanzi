@@ -34,6 +34,10 @@ class Player : public QObject
     Q_PROPERTY(int queuePosition READ queuePosition NOTIFY queueChanged)
     Q_PROPERTY(bool canGoNext READ canGoNext NOTIFY queueChanged)
     Q_PROPERTY(bool canGoPrevious READ canGoPrevious NOTIFY queueChanged)
+    // Fade length between songs in seconds (0 = off).
+    Q_PROPERTY(int crossfade READ crossfade WRITE setCrossfade NOTIFY transitionsChanged)
+    // End songs early when they fade into silence, with adaptive fades.
+    Q_PROPERTY(bool automix READ automix WRITE setAutomix NOTIFY transitionsChanged)
 
 public:
     // Mirrors MusicKit.PlaybackStates.
@@ -69,6 +73,10 @@ public:
     bool canGoPrevious() const { return hasTrack(); }
 
     void setVolume(double v);
+    int crossfade() const { return m_crossfade; }
+    bool automix() const { return m_automix; }
+    void setCrossfade(int seconds);
+    void setAutomix(bool on);
     void setShuffle(bool on);
     void setRepeatMode(RepeatMode mode);
 
@@ -117,12 +125,15 @@ signals:
     void modesChanged();
     void nowPlayingChanged();
     void queueChanged();
+    void transitionsChanged();
     void seeked(double position);
     void raiseRequested();
     void reloadRequested();
 
 private:
     void send(const QString &name, const QVariantMap &args = {});
+    void sendTransitions();
+    QVariantMap transitionArgs() const;
 
     static inline Player *s_instance = nullptr;
 
@@ -138,4 +149,6 @@ private:
     QVariantMap m_nowPlaying;
     QVariantList m_queue;
     int m_queuePosition = -1;
+    int m_crossfade = 0;
+    bool m_automix = false;
 };

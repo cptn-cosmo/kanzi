@@ -38,6 +38,13 @@ Flickable {
         }
     }
 
+    component Toggle: Switch {
+        focusPolicy: Qt.NoFocus
+        palette.button: Theme.surface
+        palette.dark: Theme.accent
+        palette.mid: Theme.placeholder
+    }
+
     component Row_: RowLayout {
         id: settingRow
         property string label
@@ -99,18 +106,97 @@ Flickable {
                     onActivated: AudioOutput.device = currentValue
                 }
             }
+
+            Row_ {
+                label: qsTr("Crossfade")
+                hint: Player.crossfade > 0
+                      ? qsTr("Fades each song out over its last %1 seconds and the next one in. Apple Music streams one song at a time, so songs don't overlap.").arg(Player.crossfade)
+                      : qsTr("Off")
+                Slider {
+                    id: crossfadeSlider
+                    Layout.preferredWidth: 220
+                    from: 0
+                    to: 12
+                    stepSize: 1
+                    snapMode: Slider.SnapAlways
+                    value: Player.crossfade
+                    onMoved: Player.crossfade = value
+                }
+                Text {
+                    Layout.preferredWidth: 34
+                    text: crossfadeSlider.value > 0 ? qsTr("%1 s").arg(crossfadeSlider.value) : qsTr("Off")
+                    color: Theme.textDim
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+
+            Row_ {
+                label: qsTr("AutoMix")
+                hint: qsTr("Listens to the end of each song and moves on as soon as it fades into silence, so there's no dead air between songs. Fades adapt to how the song ends.")
+                Toggle {
+                    checked: Player.automix
+                    onToggled: Player.automix = checked
+                }
+            }
+        }
+
+        // ---- discord ----
+        Card {
+            title: qsTr("Discord")
+
+            Row_ {
+                label: qsTr("Show what you're listening to")
+                hint: DiscordPresence.status
+                Toggle {
+                    checked: DiscordPresence.enabled
+                    onToggled: DiscordPresence.enabled = checked
+                }
+            }
+            Row_ {
+                label: qsTr("Also show while paused")
+                Toggle {
+                    enabled: DiscordPresence.enabled
+                    checked: DiscordPresence.showWhenPaused
+                    onToggled: DiscordPresence.showWhenPaused = checked
+                }
+            }
+            Row_ {
+                label: qsTr("Discord application ID")
+                hint: qsTr("Kanzi's own application is used by default. To show a different name after “Listening to”, paste the ID of your own app from discord.com/developers/applications. Clear the field to go back to the default.")
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                TextField {
+                    id: discordId
+                    Layout.fillWidth: true
+                    enabled: DiscordPresence.enabled
+                    text: DiscordPresence.clientId
+                    placeholderText: qsTr("e.g. 1234567890123456789")
+                    inputMethodHints: Qt.ImhDigitsOnly
+                    validator: RegularExpressionValidator { regularExpression: /[0-9]{0,24}/ }
+                    color: Theme.text
+                    selectByMouse: true
+                    onAccepted: DiscordPresence.clientId = text
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: Theme.hover
+                        border.width: discordId.activeFocus ? 2 : 0
+                        border.color: Theme.accent
+                    }
+                }
+                PillButton {
+                    text: qsTr("Save")
+                    primary: false
+                    enabled: DiscordPresence.enabled && discordId.text !== DiscordPresence.clientId
+                    onClicked: DiscordPresence.clientId = discordId.text
+                }
+            }
         }
 
         // ---- window ----
         Card {
             title: qsTr("Window")
-
-            component Toggle: Switch {
-                focusPolicy: Qt.NoFocus
-                palette.button: Theme.surface
-                palette.dark: Theme.accent
-                palette.mid: Theme.placeholder
-            }
 
             Row_ {
                 label: qsTr("Show icon in system tray")

@@ -1,7 +1,7 @@
 # Maintainer: cptn-cosmo <https://github.com/cptn-cosmo>
 
 pkgname=kanzi
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Modern, native Qt 6 / Wayland Apple Music client'
 arch=('x86_64')
@@ -25,7 +25,7 @@ optdepends=(
   'google-chrome: alternative source of the Widevine CDM (AUR)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('f2b8e84aceca20f813f6c10c2590f66bd82bb99636db18b97b8be4c36839bf0c')
+sha256sums=('SKIP')
 
 build() {
   cmake -S "$pkgname-$pkgver" -B build -G Ninja \

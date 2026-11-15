@@ -8,6 +8,7 @@
 
 #include "applemusic.h"
 #include "audiooutput.h"
+#include "discordpresence.h"
 #include "mpris.h"
 #include "networkfactory.h"
 #include "player.h"
@@ -72,6 +73,7 @@ int main(int argc, char *argv[])
     Mpris mpris(&player);
     AudioOutput audioOutput(nullptr);
     Tray tray(&player, nullptr);
+    DiscordPresence discord(&player, nullptr);
 
     QQmlApplicationEngine engine;
     engine.setNetworkAccessManagerFactory(new CachingNetworkFactory);

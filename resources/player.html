@@ -16,6 +16,7 @@ const DEVELOPER_TOKEN = "%DEVELOPER_TOKEN%";
 const STORED_USER_TOKEN = "%USER_TOKEN%";
 const APP_VERSION = "%VERSION%";
 const INITIAL_VOLUME = %VOLUME%;
+const INITIAL_TRANSITIONS = %TRANSITIONS%;
 
 let bridge = null;
 let music = null;
@@ -53,8 +54,163 @@ function mapItem(item) {
         explicit: a.contentRating === "explicit",
         hasLyrics: !!a.hasLyrics,
         url: a.url || "",
+        storefront: (music && music.storefrontId) || "",
     };
 }
+
+// ---------------------------------------------------------------------------
+// Transitions: crossfade and AutoMix.
+//
+// MusicKit plays a single DRM stream and can't preload the next song, so two songs
+// never overlap. Instead MusicKit's <audio> element is routed through Web Audio:
+//   element → MediaElementSource → fade GainNode → destination
+//                                 ↘ AnalyserNode (level meter for AutoMix)
+// The fade gain is separate from the user's volume (music.volume), and it's
+// recomputed from the remaining time on every tick, so pausing and seeking just work.
+// ---------------------------------------------------------------------------
+const transitions = {
+    crossfade: INITIAL_TRANSITIONS.crossfade || 0, // seconds, 0 = off
+    automix: !!INITIAL_TRANSITIONS.automix,
+};
+const audio = { ctx: null, gain: null, analyser: null, buf: null, attached: new WeakSet() };
+const fade = {
+    active: false,     // fading out the current song
+    length: 0,         // seconds the current fade-out spans
+    quietSince: -1,    // AutoMix: playback time at which the tail went quiet
+    loudSeen: false,   // AutoMix: the song has had real content (not a silent track)
+    advancing: false,  // skipToNextItem in flight
+};
+const QUIET_DB = -46;        // below this the tail counts as silence / faded out
+const LOUD_DB = -30;
+const AUTOMIX_WINDOW = 25;   // seconds before the end in which AutoMix may cut in
+const AUTOMIX_QUIET_HOLD = 1.2;
+const FADE_IN = 1.5;
+
+function transitionsEnabled() { return transitions.crossfade > 0 || transitions.automix; }
+
+function attachAudio(el) {
+    if (!el || audio.attached.has(el) || !transitionsEnabled())
+        return;
+    try {
+        if (!audio.ctx) {
+            audio.ctx = new AudioContext({ latencyHint: "playback" });
+            audio.gain = audio.ctx.createGain();
+            audio.analyser = audio.ctx.createAnalyser();
+            audio.analyser.fftSize = 2048;
+            audio.buf = new Float32Array(audio.analyser.fftSize);
+            audio.gain.connect(audio.ctx.destination);
+        }
+        const src = audio.ctx.createMediaElementSource(el);
+        src.connect(audio.gain);
+        src.connect(audio.analyser);
+        audio.attached.add(el);
+        log("transitions: audio graph attached");
+    } catch (e) {
+        log("transitions: Web Audio unavailable, fades disabled:", e.message || e);
+    }
+}
+
+// MusicKit creates its media element lazily; catch it the first time it plays.
+document.addEventListener("play", (e) => {
+    if (e.target instanceof HTMLMediaElement) {
+        attachAudio(e.target);
+        if (audio.ctx && audio.ctx.state === "suspended") audio.ctx.resume();
+    }
+}, true);
+
+function levelDb() {
+    if (!audio.analyser) return 0;
+    audio.analyser.getFloatTimeDomainData(audio.buf);
+    let sum = 0;
+    for (let i = 0; i < audio.buf.length; ++i) sum += audio.buf[i] * audio.buf[i];
+    const rms = Math.sqrt(sum / audio.buf.length);
+    return rms > 0 ? 20 * Math.log10(rms) : -120;
+}
+
+function setFadeGain(value, smoothing) {
+    if (!audio.gain) return;
+    const now = audio.ctx.currentTime;
+    audio.gain.gain.cancelScheduledValues(now);
+    audio.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, value)), now, smoothing || 0.04);
+}
+
+function hasNextItem() {
+    const q = music.queue;
+    return music.repeatMode === 2 || (q && q.position + 1 < q.items.length);
+}
+
+function resetFade() {
+    fade.active = false;
+    fade.length = 0;
+    fade.quietSince = -1;
+    fade.loudSeen = false;
+}
+
+async function advance() {
+    if (fade.advancing) return;
+    fade.advancing = true;
+    try { await music.skipToNextItem(); } catch (e) { fail("Transition failed", e); }
+    fade.advancing = false;
+}
+
+function transitionTick() {
+    if (!music || !audio.gain || !transitionsEnabled()) return;
+    if (music.playbackState !== MusicKit.PlaybackStates.playing || fade.advancing) return;
+    if (music.repeatMode === 1 || !hasNextItem()) { setFadeGain(1); return; }
+
+    const t = music.currentPlaybackTime || 0;
+    const duration = music.currentPlaybackDuration || 0;
+    if (duration < 30) return; // don't touch interludes and very short tracks
+    const remaining = duration - t;
+
+    // AutoMix: a tail that has already faded to silence ends the song early.
+    if (transitions.automix) {
+        const db = levelDb();
+        if (db > LOUD_DB) fade.loudSeen = true;
+        if (remaining <= AUTOMIX_WINDOW && fade.loudSeen && db < QUIET_DB) {
+            if (fade.quietSince < 0) fade.quietSince = t;
+            if (t - fade.quietSince >= AUTOMIX_QUIET_HOLD && !fade.active) {
+                log("automix: quiet tail, advancing with", remaining.toFixed(1), "s left");
+                setFadeGain(0, 0.15);
+                setTimeout(advance, 400);
+                fade.active = true;
+                return;
+            }
+        } else {
+            fade.quietSince = -1;
+        }
+    }
+
+    // Crossfade (AutoMix without an explicit length uses 6 s).
+    const length = transitions.crossfade > 0 ? transitions.crossfade : (transitions.automix ? 6 : 0);
+    if (length <= 0) return;
+    if (remaining <= length) {
+        fade.active = true;
+        fade.length = length;
+        const x = Math.max(0, remaining / length);
+        setFadeGain(Math.sin(x * Math.PI / 2)); // equal-power curve
+        if (remaining <= 0.35) advance();
+    } else if (fade.active) {
+        // Seeked back out of the fade zone.
+        fade.active = false;
+        setFadeGain(1, 0.1);
+    }
+}
+
+function onTrackChanged() {
+    const fadingIn = fade.active || fade.advancing;
+    resetFade();
+    if (!audio.gain) return;
+    if (fadingIn && transitionsEnabled()) {
+        audio.gain.gain.cancelScheduledValues(audio.ctx.currentTime);
+        audio.gain.gain.setValueAtTime(0.0001, audio.ctx.currentTime);
+        audio.gain.gain.linearRampToValueAtTime(1, audio.ctx.currentTime + FADE_IN);
+    } else {
+        setFadeGain(1, 0.02);
+    }
+}
+
+setInterval(transitionTick, 100);
 
 function pushState() { bridge.jsState(music.playbackState); }
 function pushTime() { bridge.jsTime(music.currentPlaybackTime || 0, music.currentPlaybackDuration || 0); }
@@ -103,6 +259,14 @@ async function onCommand(name, args) {
         case "volume": music.volume = args.value; break;
         case "shuffle": music.shuffleMode = args.value ? 1 : 0; pushModes(); break;
         case "repeat": music.repeatMode = args.value; pushModes(); break;
+        case "transitions":
+            transitions.crossfade = args.crossfade || 0;
+            transitions.automix = !!args.automix;
+            if (transitionsEnabled())
+                document.querySelectorAll("audio, video").forEach(attachAudio);
+            else
+                setFadeGain(1, 0.05);
+            break;
         case "authorize": {
             const token = await music.authorize();
             bridge.jsUserToken(token || "");
@@ -141,7 +305,7 @@ async function startMusicKit() {
     music.addEventListener(E.playbackStateDidChange, pushState);
     music.addEventListener(E.playbackTimeDidChange, pushTime);
     music.addEventListener(E.playbackDurationDidChange, pushTime);
-    music.addEventListener(E.nowPlayingItemDidChange, () => { pushNowPlaying(); pushQueue(); });
+    music.addEventListener(E.nowPlayingItemDidChange, () => { onTrackChanged(); pushNowPlaying(); pushQueue(); });
     music.addEventListener(E.queueItemsDidChange, pushQueue);
     music.addEventListener(E.queuePositionDidChange, pushQueue);
     music.addEventListener(E.playbackVolumeDidChange, () => bridge.jsVolume(music.volume));

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Kanzi VERSION 0.1.0 LANGUAGES CXX)
+project(Kanzi VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,6 +22,7 @@ qt_add_executable(kanzi
     src/networkfactory.h src/networkfactory.cpp
     src/audiooutput.h src/audiooutput.cpp
     src/tray.h src/tray.cpp
+    src/discordpresence.h src/discordpresence.cpp
 )
 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

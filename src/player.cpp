@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSettings>
 #include <QtMath>
 
@@ -27,7 +28,10 @@ Player::Player(AppleMusic *api, QObject *parent)
     if (s_instance)
         qFatal("Kanzi: %s constructed twice", "Player");
     s_instance = this;
-    m_volume = QSettings().value(QStringLiteral("player/volume"), 1.0).toDouble();
+    QSettings settings;
+    m_volume = settings.value(QStringLiteral("player/volume"), 1.0).toDouble();
+    m_crossfade = qBound(0, settings.value(QStringLiteral("player/crossfade"), 0).toInt(), 12);
+    m_automix = settings.value(QStringLiteral("player/automix"), false).toBool();
 
     // The page bakes the developer token in, so a new token means a reload.
     connect(api, &AppleMusic::developerTokenChanged, this, [this] {
@@ -61,6 +65,8 @@ QString Player::playerHtml() const
     html.replace(QStringLiteral("\"%USER_TOKEN%\""), json(m_api->userToken()));
     html.replace(QStringLiteral("\"%VERSION%\""), json(QStringLiteral(KANZI_VERSION)));
     html.replace(QStringLiteral("%VOLUME%"), QString::number(m_volume));
+    html.replace(QStringLiteral("%TRANSITIONS%"),
+                 QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(transitionArgs())).toJson(QJsonDocument::Compact)));
     return html;
 }
 
@@ -128,6 +134,37 @@ void Player::setVolume(double v)
     QSettings().setValue(QStringLiteral("player/volume"), v);
     emit volumeChanged();
     send(QStringLiteral("volume"), {{QStringLiteral("value"), v}});
+}
+
+QVariantMap Player::transitionArgs() const
+{
+    return {{QStringLiteral("crossfade"), m_crossfade}, {QStringLiteral("automix"), m_automix}};
+}
+
+void Player::sendTransitions()
+{
+    emit transitionsChanged();
+    if (m_ready)
+        emit command(QStringLiteral("transitions"), transitionArgs());
+}
+
+void Player::setCrossfade(int seconds)
+{
+    seconds = qBound(0, seconds, 12);
+    if (seconds == m_crossfade)
+        return;
+    m_crossfade = seconds;
+    QSettings().setValue(QStringLiteral("player/crossfade"), seconds);
+    sendTransitions();
+}
+
+void Player::setAutomix(bool on)
+{
+    if (on == m_automix)
+        return;
+    m_automix = on;
+    QSettings().setValue(QStringLiteral("player/automix"), on);
+    sendTransitions();
 }
 
 void Player::setShuffle(bool on)

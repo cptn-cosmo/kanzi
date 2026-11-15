@@ -7,6 +7,8 @@ A modern, native Apple Music client for Linux, built with Qt 6 / QML. It runs na
 - Queue panel, Play Next / Play Later, shuffle, repeat, volume, and seeking
 - Mini player (Ctrl+M): a frameless, resizable artwork window with controls that you can keep on top
 - System tray icon with playback menu, close-to-tray and start-in-tray
+- Crossfade (0–12 s) and AutoMix, which ends songs early once they fade into silence
+- Discord Rich Presence ("Listening to …" with cover art, progress and a link). Uses Kanzi's own Discord application by default; you can paste a different ID in Settings
 - MPRIS2 (`org.mpris.MediaPlayer2.kanzi`): media keys, desktop media widgets and lock screen controls
 - Choose the audio output device in Settings (PulseAudio/PipeWire). It switches live, no restart needed
 - Follows the system light or dark colour scheme
@@ -82,6 +84,7 @@ KANZI_DEVELOPER_TOKEN=eyJ... ./build/kanzi
 src/applemusic.*      REST client, developer-token bootstrap, TTML lyrics parser
 src/player.*          Playback state + command bridge to MusicKit JS
 src/mpris.*           MPRIS2 adaptors
+src/discordpresence.* Discord Rich Presence over the local IPC socket
 src/tray.*            Tray icon and window preferences
 src/audiooutput.*     Output device selection (moves our pulse streams to the chosen sink)
 resources/player.html MusicKit host page (loaded hidden)
