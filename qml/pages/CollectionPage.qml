@@ -27,6 +27,17 @@ ListView {
 
     function load() {
         loading = true
+        if (Nav.plex) {
+            Plex.collection(kind, itemId, (res, err) => {
+                loading = false
+                if (err)
+                    return error = err.message
+                if (res.resource && res.resource.id)
+                    resource = res.resource
+                tracks = res.tracks || []
+            })
+            return
+        }
         AppleMusic.get(collectionPath, { include: "tracks,artists" }, (res, err) => {
             loading = false
             if (err) {
@@ -58,7 +69,10 @@ ListView {
     }
 
     function play(index, shuffle) {
-        Player.playCollection(kind, itemId, index, shuffle)
+        if (Nav.plex)
+            Plex.playTracks(tracks, index, shuffle)
+        else
+            Player.playCollection(kind, itemId, index, shuffle)
     }
 
     Component.onCompleted: load()
@@ -209,9 +223,11 @@ ListView {
                                 id: collectionMenu
                                 MenuItem { text: qsTr("Play Next"); onTriggered: Nav.queueItem(root.resource, true) }
                                 MenuItem { text: qsTr("Play Later"); onTriggered: Nav.queueItem(root.resource, false) }
-                                MenuSeparator {}
+                                MenuSeparator { visible: !Nav.plex; height: visible ? implicitHeight : 0 }
                                 MenuItem {
                                     text: qsTr("Copy Apple Music Link")
+                                    visible: !Nav.plex
+                                    height: visible ? implicitHeight : 0
                                     enabled: Nav.canShare(root.resource)
                                     onTriggered: Nav.share(root.resource)
                                 }

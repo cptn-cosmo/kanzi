@@ -182,6 +182,8 @@ ItemDelegate {
         MenuItem { text: qsTr("Go to Artist"); onTriggered: Nav.openArtistOf(root.track) }
         MenuItem {
             text: qsTr("Copy Apple Music Link")
+            visible: !Nav.isPlex(root.track)
+            height: visible ? implicitHeight : 0
             enabled: Nav.canShare(root.track)
             onTriggered: Nav.share(root.track)
         }

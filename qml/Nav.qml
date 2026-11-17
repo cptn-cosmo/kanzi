@@ -15,6 +15,10 @@ QtObject {
     property bool lyricsOpen: true
     property bool miniPlayerOpen: false
 
+    // The active music source, and whether it's signed in (decides home vs. welcome).
+    readonly property bool plex: Player.source === Player.PlexSource
+    readonly property bool signedIn: plex ? Plex.signedIn : AppleMusic.authorized
+
     signal toast(string message)
     signal focusSearch()
 
@@ -61,6 +65,7 @@ QtObject {
     // ---- resource helpers ----
 
     function typeOf(item) { return item && item.type ? item.type : "" }
+    function isPlex(item) { return !!item && item.source === "plex" }
     function isLibrary(item) { return typeOf(item).startsWith("library-") }
     function attrs(item) { return item && item.attributes ? item.attributes : {} }
     function titleOf(item) { return attrs(item).name || "" }
@@ -109,6 +114,8 @@ QtObject {
             return openItem(item)
         if (!Player.ready)
             return toast(qsTr("The player is still starting…"))
+        if (isPlex(item))
+            return Plex.play(item, !!shuffle)
         Player.playCollection(kind, item.id, 0, !!shuffle)
     }
 
@@ -116,7 +123,9 @@ QtObject {
         const kind = playKind(item)
         if (!kind)
             return
-        if (next)
+        if (isPlex(item))
+            Plex.enqueue(item, !!next)
+        else if (next)
             Player.playNext(kind, item.id)
         else
             Player.playLater(kind, item.id)
@@ -143,7 +152,7 @@ QtObject {
     // These accept API resources as well as Player.nowPlaying / queue entries.
 
     function catalogIdOf(item) {
-        if (!item)
+        if (!item || isPlex(item))
             return ""
         if (item.catalogId)
             return String(item.catalogId)
@@ -157,7 +166,7 @@ QtObject {
     }
 
     function shareUrlOf(item) {
-        if (!item)
+        if (!item || isPlex(item))
             return ""
         const a = attrs(item)
         if (a.url)
@@ -189,6 +198,8 @@ QtObject {
         const rel = item.relationships
         if (rel && rel.artists && rel.artists.data && rel.artists.data.length)
             return openItem(rel.artists.data[0])
+        if (isPlex(item))
+            return toast(qsTr("Couldn't find this artist"))
         let t = typeOf(item).replace("library-", "")
         if (t !== "albums" && t !== "music-videos")
             t = "songs"

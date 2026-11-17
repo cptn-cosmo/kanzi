@@ -5,6 +5,7 @@
 #include <QVariantMap>
 
 class AppleMusic;
+class Plex;
 
 // Playback state mirrored from the MusicKit JS instance that runs inside a hidden
 // WebEngineView (see PlayerHost.qml / player.html). That page is the only place
@@ -38,6 +39,8 @@ class Player : public QObject
     Q_PROPERTY(int crossfade READ crossfade WRITE setCrossfade NOTIFY transitionsChanged)
     // End songs early when they fade into silence, with adaptive fades.
     Q_PROPERTY(bool automix READ automix WRITE setAutomix NOTIFY transitionsChanged)
+    // Which service plays and browses music: Apple Music (MusicKit page) or Plex (plex.html).
+    Q_PROPERTY(Source source READ source WRITE setSource NOTIFY sourceChanged)
 
 public:
     // Mirrors MusicKit.PlaybackStates.
@@ -48,11 +51,14 @@ public:
     Q_ENUM(State)
     enum RepeatMode { RepeatNone = 0, RepeatOne = 1, RepeatAll = 2 };
     Q_ENUM(RepeatMode)
+    enum Source { AppleMusicSource = 0, PlexSource = 1 };
+    Q_ENUM(Source)
 
     explicit Player(AppleMusic *api, QObject *parent = nullptr);
     ~Player() override;
 
     static Player *create(QQmlEngine *, QJSEngine *);
+    void connectPlex(Plex *plex);
     static Player *instance() { return s_instance; }
 
     bool ready() const { return m_ready; }
@@ -79,15 +85,23 @@ public:
     void setAutomix(bool on);
     void setShuffle(bool on);
     void setRepeatMode(RepeatMode mode);
+    Source source() const { return m_source; }
+    void setSource(Source source);
 
-    // The HTML document to load into the hidden player view (MusicKit host).
+    // The HTML document to load into the hidden player view (MusicKit or Plex host),
+    // the origin it's loaded under, and whether there's enough to load it yet.
     Q_INVOKABLE QString playerHtml() const;
+    Q_INVOKABLE QString playerBaseUrl() const;
+    Q_INVOKABLE bool canLoad() const;
 
     // type: "album" | "playlist" | "song" | "songs" | "station"; `id` is a single id or a list of ids.
     Q_INVOKABLE void playCollection(const QString &type, const QVariant &id, int startIndex = 0, bool shuffle = false);
     Q_INVOKABLE void playNext(const QString &type, const QString &id);
     Q_INVOKABLE void playLater(const QString &type, const QString &id);
     Q_INVOKABLE void jumpTo(int queueIndex);
+    // Plex: play / queue ready-made items ({ id, title, …, src }); see Plex::queueItem.
+    void playTracks(const QVariantList &items, int startIndex, bool shuffle);
+    void queueTracks(const QVariantList &items, bool next);
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -126,6 +140,7 @@ signals:
     void nowPlayingChanged();
     void queueChanged();
     void transitionsChanged();
+    void sourceChanged();
     void seeked(double position);
     void raiseRequested();
     void reloadRequested();
@@ -134,6 +149,7 @@ private:
     void send(const QString &name, const QVariantMap &args = {});
     void sendTransitions();
     QVariantMap transitionArgs() const;
+    void resetState();
 
     static inline Player *s_instance = nullptr;
 
@@ -151,4 +167,5 @@ private:
     int m_queuePosition = -1;
     int m_crossfade = 0;
     bool m_automix = false;
+    Source m_source = AppleMusicSource;
 };

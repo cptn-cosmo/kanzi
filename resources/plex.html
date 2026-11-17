@@ -1,0 +1,470 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kanzi Plex Player</title>
+<!--
+  Hidden audio host for Plex. Loaded with the Plex server as its base URL, so the
+  streams are same-origin and Web Audio can analyse and mix them. It speaks the
+  same WebChannel protocol as player.html (the `bridge` object is the C++ Player),
+  but owns the queue itself: Plex streams are plain HTTP, so unlike MusicKit two
+  songs can overlap, which makes real crossfades and gapless preloading possible.
+
+  Queue items come ready-made from C++ (Plex::queueItem): { id, title, artist, album,
+  artwork, duration, src, fallbackSrc, … }.
+-->
+<script>/*QWEBCHANNEL_JS*/</script>
+<script>
+"use strict";
+const INITIAL_VOLUME = %VOLUME%;
+const INITIAL_TRANSITIONS = %TRANSITIONS%;
+
+// Mirrors MusicKit.PlaybackStates, which Player expects.
+const S = { none: 0, loading: 1, playing: 2, paused: 3, stopped: 4, ended: 5, seeking: 6, waiting: 8, stalled: 9 };
+
+let bridge = null;
+
+function log(...args) {
+    console.log(...args);
+    if (bridge) bridge.jsLog(args.map(String).join(" "));
+}
+function fail(text) {
+    console.error(text);
+    if (bridge) bridge.jsError(text);
+}
+
+// ---------------------------------------------------------------------------
+// Queue
+// ---------------------------------------------------------------------------
+let queue = [];      // play order
+let unshuffled = []; // original order, to return to when shuffle is turned off
+let pos = -1;
+let shuffle = false;
+let repeat = 0;      // 0 none, 1 one, 2 all
+let nextQid = 1;
+let volume = INITIAL_VOLUME;
+const transitions = {
+    crossfade: INITIAL_TRANSITIONS.crossfade || 0,
+    automix: !!INITIAL_TRANSITIONS.automix,
+};
+
+function tag(items) { return (items || []).map(it => Object.assign({}, it, { qid: nextQid++ })); }
+function current() { return pos >= 0 && pos < queue.length ? queue[pos] : null; }
+
+function shuffled(list) {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; --i) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+function nextIndex() {
+    if (pos + 1 < queue.length) return pos + 1;
+    return repeat === 2 && queue.length ? 0 : -1;
+}
+
+function publicItem(it) {
+    const out = Object.assign({}, it);
+    delete out.src;
+    delete out.fallbackSrc;
+    delete out.qid;
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// Audio: two decks, each element → gain (fades) → master (volume) → speakers,
+// with an analyser per deck for AutoMix.
+// ---------------------------------------------------------------------------
+const ctx = (() => { try { return new AudioContext({ latencyHint: "playback" }); } catch (e) { return null; } })();
+const master = ctx ? ctx.createGain() : null;
+if (master) { master.gain.value = volume; master.connect(ctx.destination); }
+
+function makeDeck() {
+    const el = new Audio();
+    el.preload = "auto";
+    el.crossOrigin = "anonymous";
+    const deck = { el, item: null, gain: null, analyser: null, buf: null, triedFallback: false };
+    if (ctx) {
+        try {
+            const src = ctx.createMediaElementSource(el);
+            deck.gain = ctx.createGain();
+            deck.analyser = ctx.createAnalyser();
+            deck.analyser.fftSize = 2048;
+            deck.buf = new Float32Array(deck.analyser.fftSize);
+            src.connect(deck.gain);
+            src.connect(deck.analyser);
+            deck.gain.connect(master);
+        } catch (e) {
+            log("Web Audio unavailable, fades disabled:", e.message || e);
+            deck.gain = null;
+        }
+    }
+    if (!deck.gain) el.volume = volume;
+    return deck;
+}
+
+const decks = [makeDeck(), makeDeck()];
+let active = 0;
+const A = () => decks[active];
+const B = () => decks[1 - active];
+
+function setGain(deck, value, ramp) {
+    if (!deck.gain) return;
+    const g = deck.gain.gain, now = ctx.currentTime;
+    g.cancelScheduledValues(now);
+    if (ramp > 0) {
+        g.setValueAtTime(Math.max(0.0001, g.value), now);
+        g.linearRampToValueAtTime(Math.max(0, value), now + ramp);
+    } else {
+        g.setValueAtTime(value, now);
+    }
+}
+
+function load(deck, item) {
+    deck.item = item;
+    deck.triedFallback = false;
+    deck.el.src = item.src;
+    deck.el.load();
+}
+
+function unload(deck) {
+    deck.el.pause();
+    deck.el.removeAttribute("src");
+    deck.el.load();
+    deck.item = null;
+    setGain(deck, 1);
+}
+
+function levelDb(deck) {
+    if (!deck.analyser) return 0;
+    deck.analyser.getFloatTimeDomainData(deck.buf);
+    let sum = 0;
+    for (let i = 0; i < deck.buf.length; ++i) sum += deck.buf[i] * deck.buf[i];
+    const rms = Math.sqrt(sum / deck.buf.length);
+    return rms > 0 ? 20 * Math.log10(rms) : -120;
+}
+
+async function resume() {
+    if (ctx && ctx.state === "suspended") {
+        try { await ctx.resume(); } catch (e) { /* autoplay is allowed by flag */ }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Reporting
+// ---------------------------------------------------------------------------
+let state = S.none;
+function setState(s) {
+    if (s === state) return;
+    state = s;
+    bridge.jsState(s);
+}
+function pushTime() {
+    const el = A().el;
+    const d = isFinite(el.duration) && el.duration > 0 ? el.duration : (current() ? current().duration : 0);
+    bridge.jsTime(el.currentTime || 0, d || 0);
+}
+function pushNowPlaying() { const it = current(); bridge.jsNowPlaying(it ? publicItem(it) : {}); }
+function pushQueue() { bridge.jsQueue(queue.map(publicItem), pos); }
+function pushModes() { bridge.jsModes(shuffle, repeat); }
+
+// ---------------------------------------------------------------------------
+// Transport
+// ---------------------------------------------------------------------------
+const mix = {
+    active: false,   // B (old song) fading out while A (new song) fades in
+    timer: 0,
+    quietSince: -1,  // AutoMix
+    loudSeen: false,
+};
+let errors = 0;
+
+function endMix() {
+    if (!mix.active) return;
+    clearTimeout(mix.timer);
+    mix.active = false;
+    unload(B());
+}
+
+// Starts queue[index] on the active deck (reusing a preloaded idle deck if it holds it).
+async function start(index, opts) {
+    opts = opts || {};
+    endMix();
+    const item = queue[index];
+    if (!item) return;
+    pos = index;
+    mix.quietSince = -1;
+    mix.loudSeen = false;
+
+    const idle = B();
+    if (idle.item && idle.item.qid === item.qid) {
+        unload(A());
+        active = 1 - active;
+    } else {
+        unload(idle);
+        load(A(), item);
+    }
+    const deck = A();
+    if (opts.fadeIn > 0) {
+        setGain(deck, 0.0001);
+        setGain(deck, 1, opts.fadeIn);
+    } else {
+        setGain(deck, 1);
+    }
+    pushNowPlaying();
+    pushQueue();
+    pushTime();
+    if (opts.autoplay === false) { setState(S.paused); return; }
+    setState(S.loading);
+    await resume();
+    try {
+        await deck.el.play();
+    } catch (e) {
+        if (e.name !== "AbortError") log("play() rejected:", e.message || e);
+    }
+}
+
+// Crossfade into the next song: the current deck becomes the idle one and fades out.
+async function crossfadeTo(index, length) {
+    const item = queue[index];
+    if (!item || !A().gain) return start(index);
+    endMix();
+    const old = A();
+    active = 1 - active;
+    const deck = A();
+    if (!deck.item || deck.item.qid !== item.qid) load(deck, item);
+    pos = index;
+    mix.active = true;
+    mix.quietSince = -1;
+    mix.loudSeen = false;
+    setGain(old, 0, length);
+    setGain(deck, 0.0001);
+    setGain(deck, 1, Math.min(length, 3));
+    mix.timer = setTimeout(endMix, length * 1000 + 250);
+    pushNowPlaying();
+    pushQueue();
+    await resume();
+    try { await deck.el.play(); } catch (e) { if (e.name !== "AbortError") log("play() rejected:", e.message || e); }
+}
+
+function advance(auto) {
+    if (auto && repeat === 1) return start(pos);
+    const n = nextIndex();
+    if (n < 0) {
+        // End of the queue: stay on the last song, stopped at its start.
+        endMix();
+        A().el.pause();
+        try { A().el.currentTime = 0; } catch (e) { /* not seekable yet */ }
+        setState(S.stopped);
+        pushTime();
+        return;
+    }
+    return start(n);
+}
+
+function retreat() {
+    if (pos > 0) return start(pos - 1);
+    if (repeat === 2 && queue.length) return start(queue.length - 1);
+    return start(Math.max(0, pos));
+}
+
+// Buffer the next song on the idle deck shortly before it's needed (gapless playback).
+function preload() {
+    if (mix.active || repeat === 1) return;
+    const n = nextIndex();
+    const item = n >= 0 ? queue[n] : null;
+    const idle = B();
+    if (!item || (idle.item && idle.item.qid === item.qid)) return;
+    load(idle, item);
+}
+
+function tick() {
+    const deck = A();
+    const el = deck.el;
+    if (!current() || el.paused || state !== S.playing) return;
+    const duration = isFinite(el.duration) ? el.duration : 0;
+    if (duration <= 0) return;
+    const remaining = duration - el.currentTime;
+
+    if (remaining < 25) preload();
+    if (mix.active || repeat === 1 || nextIndex() < 0 || duration < 30) return;
+
+    // AutoMix: a tail that has already faded out ends the song early.
+    if (transitions.automix && deck.analyser) {
+        const db = levelDb(deck);
+        if (db > -30) mix.loudSeen = true;
+        if (remaining <= 25 && mix.loudSeen && db < -46) {
+            if (mix.quietSince < 0) mix.quietSince = el.currentTime;
+            if (el.currentTime - mix.quietSince >= 1.2) {
+                log("automix: quiet tail, mixing with", remaining.toFixed(1), "s left");
+                return crossfadeTo(nextIndex(), Math.min(2, remaining));
+            }
+        } else {
+            mix.quietSince = -1;
+        }
+    }
+
+    const length = transitions.crossfade > 0 ? transitions.crossfade : (transitions.automix ? 6 : 0);
+    if (length > 0 && remaining <= length)
+        crossfadeTo(nextIndex(), Math.max(0.5, remaining));
+}
+setInterval(tick, 100);
+
+for (const deck of decks) {
+    const el = deck.el;
+    const isActive = () => deck === A();
+    el.addEventListener("playing", () => { if (isActive()) { errors = 0; setState(S.playing); } });
+    el.addEventListener("pause", () => { if (isActive() && state !== S.stopped) setState(S.paused); });
+    el.addEventListener("waiting", () => { if (isActive() && !el.paused) setState(S.waiting); });
+    el.addEventListener("stalled", () => { if (isActive() && !el.paused && el.readyState < 3) setState(S.stalled); });
+    el.addEventListener("seeking", () => { if (isActive()) setState(S.seeking); });
+    el.addEventListener("seeked", () => { if (isActive()) { setState(el.paused ? S.paused : S.playing); pushTime(); } });
+    el.addEventListener("timeupdate", () => { if (isActive()) pushTime(); });
+    el.addEventListener("durationchange", () => { if (isActive()) pushTime(); });
+    el.addEventListener("ended", () => {
+        if (isActive()) advance(true);
+        else if (mix.active) endMix();
+    });
+    el.addEventListener("error", () => {
+        if (!deck.item) return;
+        const item = deck.item;
+        const code = el.error ? el.error.code : 0;
+        if (item.fallbackSrc && !deck.triedFallback) {
+            log("direct play failed (", code, ") for", item.title, "— transcoding");
+            deck.triedFallback = true;
+            const wasActive = isActive();
+            el.src = item.fallbackSrc;
+            el.load();
+            if (wasActive && state !== S.paused) el.play().catch(() => {});
+            return;
+        }
+        if (!isActive()) { deck.item = null; return; } // a failed preload; retried when it's due
+        fail(`Couldn't play “${item.title}”` + (el.error && el.error.message ? `: ${el.error.message}` : ""));
+        if (++errors < 5 && nextIndex() >= 0) setTimeout(() => advance(false), 800);
+        else setState(S.stopped);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Commands from C++
+// ---------------------------------------------------------------------------
+function setShuffle(on) {
+    if (on === shuffle) return;
+    shuffle = on;
+    const cur = current();
+    if (on) {
+        unshuffled = queue.slice();
+        const rest = queue.filter(it => it !== cur);
+        queue = cur ? [cur].concat(shuffled(rest)) : shuffled(rest);
+        pos = cur ? 0 : -1;
+    } else {
+        const present = new Set(queue.map(it => it.qid));
+        const base = unshuffled.filter(it => present.has(it.qid));
+        const known = new Set(base.map(it => it.qid));
+        queue = base.concat(queue.filter(it => !known.has(it.qid)));
+        pos = cur ? queue.findIndex(it => it.qid === cur.qid) : -1;
+    }
+    if (B().item && !mix.active) unload(B()); // the preloaded "next" may have changed
+    pushModes();
+    pushQueue();
+}
+
+function insert(items, next) {
+    const tagged = tag(items);
+    const at = next ? pos + 1 : queue.length;
+    queue.splice(at, 0, ...tagged);
+    if (shuffle) {
+        const cur = current();
+        const ui = cur ? unshuffled.findIndex(it => it.qid === cur.qid) : -1;
+        unshuffled.splice(next && ui >= 0 ? ui + 1 : unshuffled.length, 0, ...tagged);
+    }
+    if (next && B().item && !mix.active) unload(B());
+    if (pos < 0) start(0);
+    else pushQueue();
+}
+
+async function onCommand(name, args) {
+    try {
+        switch (name) {
+        case "setQueue": {
+            const items = tag(args.items);
+            if (!items.length) return;
+            let startIndex = Math.max(0, Math.min(items.length - 1, args.startIndex || 0));
+            if (args.shuffle) shuffle = true;
+            else if (shuffle && startIndex > 0) shuffle = false;
+            unshuffled = items;
+            if (shuffle) {
+                const first = args.shuffle && startIndex === 0 ? null : items[startIndex];
+                const rest = items.filter(it => it !== first);
+                queue = first ? [first].concat(shuffled(rest)) : shuffled(rest);
+                startIndex = 0;
+            } else {
+                queue = items.slice();
+            }
+            unload(B());
+            pushModes();
+            await start(startIndex);
+            break;
+        }
+        case "playNext": insert(args.items, true); break;
+        case "playLater": insert(args.items, false); break;
+        case "jumpTo": if (args.index >= 0 && args.index < queue.length) await start(args.index); break;
+        case "play":
+            if (!current()) return;
+            if (state === S.stopped && A().el.ended) return start(pos);
+            await resume();
+            if (!A().el.src && current()) return start(pos);
+            await A().el.play();
+            if (mix.active) B().el.play().catch(() => {});
+            break;
+        case "pause":
+            A().el.pause();
+            endMix();
+            break;
+        case "next": await advance(false); break;
+        case "previous": await retreat(); break;
+        case "seek":
+            endMix();
+            setGain(A(), 1, 0.05);
+            if (A().el.src) A().el.currentTime = args.time;
+            break;
+        case "volume":
+            volume = Math.max(0, Math.min(1, args.value));
+            if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
+            else decks.forEach(d => { d.el.volume = volume; });
+            bridge.jsVolume(volume);
+            break;
+        case "shuffle": setShuffle(!!args.value); break;
+        case "repeat": repeat = args.value; pushModes(); pushQueue(); break;
+        case "transitions":
+            transitions.crossfade = args.crossfade || 0;
+            transitions.automix = !!args.automix;
+            break;
+        case "authorize":
+        case "unauthorize":
+            break;
+        default:
+            log("unknown command", name);
+        }
+    } catch (e) {
+        fail(name + " failed: " + (e.message || e));
+    }
+}
+
+new QWebChannel(qt.webChannelTransport, (channel) => {
+    bridge = channel.objects.bridge;
+    bridge.command.connect(onCommand);
+    pushModes();
+    setState(S.none);
+    bridge.jsState(S.none);
+    pushNowPlaying();
+    pushQueue();
+    bridge.jsReady();
+    log("Plex player ready");
+});
+</script>
+</head>
+<body></body>
+</html>

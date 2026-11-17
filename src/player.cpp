@@ -1,6 +1,7 @@
 #include "player.h"
 
 #include "applemusic.h"
+#include "plex.h"
 
 #include <QFile>
 #include <QJsonArray>
@@ -32,14 +33,63 @@ Player::Player(AppleMusic *api, QObject *parent)
     m_volume = settings.value(QStringLiteral("player/volume"), 1.0).toDouble();
     m_crossfade = qBound(0, settings.value(QStringLiteral("player/crossfade"), 0).toInt(), 12);
     m_automix = settings.value(QStringLiteral("player/automix"), false).toBool();
+    m_source = settings.value(QStringLiteral("player/source")).toString() == QLatin1String("plex") ? PlexSource : AppleMusicSource;
 
     // The page bakes the developer token in, so a new token means a reload.
     connect(api, &AppleMusic::developerTokenChanged, this, [this] {
+        if (m_source != AppleMusicSource)
+            return;
         m_ready = false;
         emit readyChanged();
         emit reloadRequested();
     });
-    connect(api, &AppleMusic::signOutRequested, this, [this] { send(QStringLiteral("unauthorize")); });
+    connect(api, &AppleMusic::signOutRequested, this, [this] {
+        if (m_source == AppleMusicSource)
+            send(QStringLiteral("unauthorize"));
+    });
+}
+
+void Player::connectPlex(Plex *plex)
+{
+    // The Plex page is loaded under the server's origin, so a new server means a reload.
+    connect(plex, &Plex::serverUrlChanged, this, [this] {
+        if (m_source != PlexSource)
+            return;
+        resetState();
+        emit reloadRequested();
+    });
+}
+
+void Player::setSource(Source source)
+{
+    if (source == m_source)
+        return;
+    m_source = source;
+    QSettings().setValue(QStringLiteral("player/source"),
+                         source == PlexSource ? QStringLiteral("plex") : QStringLiteral("apple"));
+    resetState();
+    emit sourceChanged();
+    emit reloadRequested();
+}
+
+// Forget everything the old page reported; the new page reports afresh once it's up.
+void Player::resetState()
+{
+    m_ready = false;
+    m_state = None;
+    m_position = m_duration = 0;
+    m_nowPlaying.clear();
+    m_queue.clear();
+    m_queuePosition = -1;
+    if (!m_error.isEmpty()) {
+        m_error.clear();
+        emit errorStringChanged();
+    }
+    emit readyChanged();
+    emit stateChanged();
+    emit nowPlayingChanged();
+    emit positionChanged();
+    emit queueChanged();
 }
 
 Player::~Player()
@@ -53,9 +103,24 @@ Player *Player::create(QQmlEngine *, QJSEngine *)
     return s_instance;
 }
 
+bool Player::canLoad() const
+{
+    if (m_source == PlexSource)
+        return Plex::instance() && !Plex::instance()->serverUrl().isEmpty();
+    return !m_api->developerToken().isEmpty();
+}
+
+QString Player::playerBaseUrl() const
+{
+    if (m_source == PlexSource && Plex::instance())
+        return Plex::instance()->serverUrl() + u'/';
+    return QStringLiteral("https://music.apple.com/");
+}
+
 QString Player::playerHtml() const
 {
-    QString html = readResource(QStringLiteral(":/qt/qml/Kanzi/resources/player.html"));
+    QString html = readResource(m_source == PlexSource ? QStringLiteral(":/qt/qml/Kanzi/resources/plex.html")
+                                                       : QStringLiteral(":/qt/qml/Kanzi/resources/player.html"));
     const QString channel = readResource(QStringLiteral(":/qtwebchannel/qwebchannel.js"));
     const auto json = [](const QString &s) {
         return QString::fromUtf8(QJsonDocument(QJsonArray{s}).toJson(QJsonDocument::Compact)).mid(1).chopped(1);
@@ -95,6 +160,18 @@ void Player::playNext(const QString &type, const QString &id)
 void Player::playLater(const QString &type, const QString &id)
 {
     send(QStringLiteral("playLater"), {{QStringLiteral("type"), type}, {QStringLiteral("id"), id}});
+}
+
+void Player::playTracks(const QVariantList &items, int startIndex, bool shuffle)
+{
+    send(QStringLiteral("setQueue"), {{QStringLiteral("items"), items},
+                                      {QStringLiteral("startIndex"), startIndex},
+                                      {QStringLiteral("shuffle"), shuffle}});
+}
+
+void Player::queueTracks(const QVariantList &items, bool next)
+{
+    send(next ? QStringLiteral("playNext") : QStringLiteral("playLater"), {{QStringLiteral("items"), items}});
 }
 
 void Player::jumpTo(int queueIndex)
@@ -188,7 +265,8 @@ void Player::cycleRepeat()
 
 void Player::authorize()
 {
-    send(QStringLiteral("authorize"));
+    if (m_source == AppleMusicSource)
+        send(QStringLiteral("authorize"));
 }
 
 // ---- page → native ----
@@ -267,5 +345,6 @@ void Player::jsQueue(const QVariantList &items, int position)
 
 void Player::jsUserToken(const QString &token)
 {
-    m_api->setUserToken(token);
+    if (m_source == AppleMusicSource)
+        m_api->setUserToken(token);
 }

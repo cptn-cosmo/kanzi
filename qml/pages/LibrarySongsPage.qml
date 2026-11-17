@@ -8,11 +8,21 @@ ColumnLayout {
     spacing: 12
 
     property var songs: []
-    property string next: ""
+    property var next: ""   // Apple: next page's path; Plex: next offset
     property bool loading: false
 
     function fetch(path) {
         loading = true
+        if (Nav.plex) {
+            Plex.browse("songs", path || 0, (res, err) => {
+                loading = false
+                if (err)
+                    return Nav.toast(err.message)
+                songs = songs.concat(res.data || [])
+                next = res.next > 0 ? res.next : ""
+            })
+            return
+        }
         AppleMusic.get(path, { limit: 100 }, (res, err) => {
             loading = false
             if (err)
@@ -24,12 +34,14 @@ ColumnLayout {
 
     // MusicKit queues get unwieldy past a few hundred entries; queue a window from the clicked song.
     function playFrom(index, shuffle) {
+        if (Nav.plex)
+            return Plex.playTracks(songs.slice(index, index + 1000), 0, shuffle)
         const ids = songs.slice(index, index + 300).filter(s => s.attributes && s.attributes.playParams).map(s => s.id)
         if (ids.length)
             Player.playCollection("songs", ids, 0, shuffle)
     }
 
-    Component.onCompleted: fetch("/v1/me/library/songs")
+    Component.onCompleted: fetch(Nav.plex ? 0 : "/v1/me/library/songs")
 
     PageHeader {
         Layout.fillWidth: true

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Kanzi VERSION 0.3.0 LANGUAGES CXX)
+project(Kanzi VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,6 +21,7 @@ qt_add_executable(kanzi
     src/main.cpp
     src/applemusic.h src/applemusic.cpp
     src/player.h src/player.cpp
+    src/plex.h src/plex.cpp
     src/mpris.h src/mpris.cpp
     src/networkfactory.h src/networkfactory.cpp
     src/audiooutput.h src/audiooutput.cpp
@@ -73,6 +74,7 @@ qt_add_qml_module(kanzi
         qml/pages/SettingsPage.qml
     RESOURCES
         resources/player.html
+        resources/plex.html
         resources/kanzi.svg
 )
 

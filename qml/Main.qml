@@ -213,14 +213,21 @@ ApplicationWindow {
         }
     }
 
-    property bool wasAuthorized: AppleMusic.authorized
+    // Signing in or out, switching between Apple Music and Plex, or picking another
+    // Plex library all start over from the home page.
     Connections {
-        target: AppleMusic
-        function onUserTokenChanged() {
-            if (AppleMusic.authorized === win.wasAuthorized)
-                return
-            win.wasAuthorized = AppleMusic.authorized
-            Nav.show(AppleMusic.authorized ? "home" : "welcome")
+        target: Nav
+        function onSignedInChanged() { Nav.show(Nav.signedIn ? "home" : "welcome") }
+    }
+    Connections {
+        target: Player
+        function onSourceChanged() { Nav.show(Nav.signedIn ? "home" : "welcome") }
+    }
+    Connections {
+        target: Plex
+        function onSectionChanged() {
+            if (Nav.plex && Nav.signedIn && Nav.section !== "settings")
+                Nav.show("home")
         }
     }
 
@@ -252,6 +259,6 @@ ApplicationWindow {
         if (!(Tray.active && Tray.startInTray))
             win.show()
         Nav.stack = stack
-        Nav.show(AppleMusic.authorized ? "home" : "welcome")
+        Nav.show(Nav.signedIn ? "home" : "welcome")
     }
 }

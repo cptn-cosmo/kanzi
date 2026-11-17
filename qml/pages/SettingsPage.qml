@@ -77,6 +77,134 @@ Flickable {
             title: qsTr("Settings")
         }
 
+        // ---- source ----
+        Card {
+            title: qsTr("Music source")
+
+            Row_ {
+                label: qsTr("Play music from")
+                hint: qsTr("Switch any time; it's also in the menu at the bottom of the sidebar. Switching stops what's playing.")
+                ComboBox {
+                    Layout.preferredWidth: 220
+                    textRole: "name"
+                    valueRole: "value"
+                    model: [{ value: Player.AppleMusicSource, name: qsTr("Apple Music") },
+                            { value: Player.PlexSource, name: qsTr("Plex") }]
+                    currentIndex: Nav.plex ? 1 : 0
+                    onActivated: Player.source = currentValue
+                }
+            }
+        }
+
+        // ---- plex ----
+        Card {
+            title: qsTr("Plex")
+
+            Row_ {
+                label: Plex.signingIn ? qsTr("Waiting for you to sign in in the browser…")
+                     : Plex.accountName ? qsTr("Signed in as %1").arg(Plex.accountName)
+                     : Plex.signedIn ? qsTr("Connected with a server token")
+                     : qsTr("Not signed in")
+                hint: {
+                    switch (Plex.status) {
+                    case Plex.Ready: return qsTr("Connected to %1 (%2)").arg(Plex.serverName).arg(Plex.serverUrl)
+                    case Plex.Connecting: return qsTr("Connecting…")
+                    case Plex.Error: return Plex.errorString
+                    default: return qsTr("Sign in with your Plex account, or enter a server address below.")
+                    }
+                }
+                PillButton {
+                    visible: Plex.status === Plex.Error && Plex.signedIn
+                    text: qsTr("Retry")
+                    primary: false
+                    onClicked: Plex.reconnect()
+                }
+                PillButton {
+                    text: Plex.signingIn ? qsTr("Cancel") : Plex.signedIn ? qsTr("Sign out") : qsTr("Sign in")
+                    primary: !Plex.signedIn && !Plex.signingIn
+                    onClicked: Plex.signingIn ? Plex.cancelSignIn() : Plex.signedIn ? Plex.signOut() : Plex.signIn()
+                }
+            }
+
+            Row_ {
+                visible: Plex.servers.length > 1
+                label: qsTr("Server")
+                ComboBox {
+                    id: serverBox
+                    Layout.preferredWidth: 300
+                    textRole: "name"
+                    valueRole: "id"
+                    model: Plex.servers
+                    onModelChanged: currentIndex = indexOfValue(Plex.serverId)
+                    Component.onCompleted: currentIndex = indexOfValue(Plex.serverId)
+                    Connections {
+                        target: Plex
+                        function onServerChanged() { serverBox.currentIndex = serverBox.indexOfValue(Plex.serverId) }
+                    }
+                    onActivated: Plex.selectServer(currentValue)
+                }
+            }
+
+            Row_ {
+                visible: Plex.sections.length > 0
+                label: qsTr("Music library")
+                ComboBox {
+                    id: sectionBox
+                    Layout.preferredWidth: 300
+                    textRole: "title"
+                    valueRole: "id"
+                    model: Plex.sections
+                    onModelChanged: currentIndex = indexOfValue(Plex.sectionId)
+                    Component.onCompleted: currentIndex = indexOfValue(Plex.sectionId)
+                    Connections {
+                        target: Plex
+                        function onSectionChanged() { sectionBox.currentIndex = sectionBox.indexOfValue(Plex.sectionId) }
+                    }
+                    onActivated: Plex.sectionId = currentValue
+                }
+            }
+
+            Row_ {
+                label: qsTr("Connect by address")
+                hint: qsTr("Optional. Use a specific server address, e.g. http://192.168.1.10:32400. The token can be left empty when you're signed in; otherwise use your server's X-Plex-Token.")
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                component Field: TextField {
+                    id: field
+                    color: Theme.text
+                    selectByMouse: true
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: Theme.hover
+                        border.width: field.activeFocus ? 2 : 0
+                        border.color: Theme.accent
+                    }
+                }
+                Field {
+                    id: plexUrl
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 3
+                    placeholderText: qsTr("http://server:32400")
+                    text: Plex.serverUrl
+                }
+                Field {
+                    id: plexToken
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 2
+                    placeholderText: qsTr("Token (optional)")
+                    echoMode: activeFocus ? TextInput.Normal : TextInput.Password
+                }
+                PillButton {
+                    text: qsTr("Connect")
+                    primary: false
+                    enabled: plexUrl.text.trim() !== "" && (plexToken.text.trim() !== "" || Plex.signedIn)
+                    onClicked: Plex.connectManually(plexUrl.text, plexToken.text)
+                }
+            }
+        }
+
         // ---- playback ----
         Card {
             title: qsTr("Playback")
@@ -109,9 +237,9 @@ Flickable {
 
             Row_ {
                 label: qsTr("Crossfade")
-                hint: Player.crossfade > 0
-                      ? qsTr("Fades each song out over its last %1 seconds and the next one in. Apple Music streams one song at a time, so songs don't overlap.").arg(Player.crossfade)
-                      : qsTr("Off")
+                hint: Player.crossfade <= 0 ? qsTr("Off")
+                      : Nav.plex ? qsTr("Blends the last %1 seconds of each song into the next one.").arg(Player.crossfade)
+                      : qsTr("Fades each song out over its last %1 seconds and the next one in. Apple Music streams one song at a time, so songs don't overlap.").arg(Player.crossfade)
                 Slider {
                     id: crossfadeSlider
                     Layout.preferredWidth: 220
@@ -240,7 +368,7 @@ Flickable {
 
         // ---- account ----
         Card {
-            title: qsTr("Account")
+            title: qsTr("Apple Music account")
 
             Row_ {
                 label: AppleMusic.authorized ? qsTr("Signed in to Apple Music") : qsTr("Not signed in")
@@ -306,7 +434,7 @@ Flickable {
             title: qsTr("About")
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Kanzi %1 · Native Apple Music client · %2 backend").arg(Qt.application.version).arg(Qt.platform.pluginName)
+                text: qsTr("Kanzi %1 · Native Apple Music and Plex client · %2 backend").arg(Qt.application.version).arg(Qt.platform.pluginName)
                 color: Theme.textDim
                 wrapMode: Text.WordWrap
             }

@@ -90,6 +90,17 @@ Flickable {
     }
 
     function load() {
+        if (Nav.plex) {
+            Plex.artist(itemId, (res, err) => {
+                loading = false
+                if (err)
+                    return error = err.message
+                artist = res.artist
+                topSongs = res.topSongs || []
+                shelves = res.shelves || []
+            })
+            return
+        }
         if (!library)
             return loadCatalog(itemId)
         // Library artist: show what's in the library, then enrich from the catalog when linked.
@@ -202,15 +213,17 @@ Flickable {
                         PillButton {
                             text: qsTr("Play")
                             iconName: "play"
-                            enabled: root.topSongs.length > 0
-                            onClicked: Player.playCollection("songs", root.topSongs.map(s => s.id), 0)
+                            enabled: root.topSongs.length > 0 || (Nav.plex && !!root.artist)
+                            onClicked: Nav.plex ? Plex.play(root.artist, false)
+                                                : Player.playCollection("songs", root.topSongs.map(s => s.id), 0)
                         }
                         PillButton {
                             text: qsTr("Shuffle")
                             iconName: "shuffle"
                             primary: false
-                            enabled: root.topSongs.length > 0
-                            onClicked: Player.playCollection("songs", root.topSongs.map(s => s.id), 0, true)
+                            enabled: root.topSongs.length > 0 || (Nav.plex && !!root.artist)
+                            onClicked: Nav.plex ? Plex.play(root.artist, true)
+                                                : Player.playCollection("songs", root.topSongs.map(s => s.id), 0, true)
                         }
                     }
                 }
@@ -259,7 +272,8 @@ Flickable {
                         track: modelData
                         showArtwork: true
                         showArtist: false
-                        onActivated: Player.playCollection("songs", root.topSongs.map(s => s.id), index)
+                        onActivated: Nav.plex ? Plex.playTracks(root.topSongs, index)
+                                              : Player.playCollection("songs", root.topSongs.map(s => s.id), index)
                     }
                 }
             }

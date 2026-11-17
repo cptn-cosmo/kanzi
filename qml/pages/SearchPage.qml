@@ -18,11 +18,25 @@ Flickable {
 
     function run() {
         const gen = ++generation
-        if (!term || AppleMusic.status !== AppleMusic.Ready) {
+        if (!term || (!Nav.plex && AppleMusic.status !== AppleMusic.Ready)) {
             songs = albums = artists = playlists = []
             return
         }
         loading = true
+        if (Nav.plex) {
+            Plex.search(term, (res, err) => {
+                if (gen !== root.generation)
+                    return
+                loading = false
+                if (err)
+                    return Nav.toast(err.message)
+                songs = res.songs
+                albums = res.albums
+                artists = res.artists
+                playlists = res.playlists
+            })
+            return
+        }
         const library = scope === "library"
         const path = library ? "/v1/me/library/search" : "/v1/catalog/{sf}/search"
         const types = library ? "library-songs,library-albums,library-artists,library-playlists"
@@ -61,7 +75,7 @@ Flickable {
             title: root.term ? qsTr("Results for “%1”").arg(root.term) : qsTr("Search")
 
             Rectangle {
-                visible: AppleMusic.authorized
+                visible: AppleMusic.authorized && !Nav.plex
                 implicitWidth: scopeRow.implicitWidth + 8
                 implicitHeight: 34
                 radius: height / 2
@@ -137,7 +151,8 @@ Flickable {
                         Layout.fillWidth: true
                         track: modelData
                         showArtwork: true
-                        onActivated: Player.playCollection("songs", root.songs.map(s => s.id), index)
+                        onActivated: Nav.plex ? Plex.playTracks(root.songs, index)
+                                              : Player.playCollection("songs", root.songs.map(s => s.id), index)
                     }
                 }
             }

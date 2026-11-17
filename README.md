@@ -1,7 +1,8 @@
 # Kanzi
 
-A modern, native Apple Music client for Linux, built with Qt 6 / QML. It runs natively on Wayland.
+A modern, native Apple Music and Plex client for Linux, built with Qt 6 / QML. It runs natively on Wayland.
 
+- Two music sources: Apple Music, or the music libraries on your Plex Media Server. Switch between them from the menu at the bottom of the sidebar or in Settings
 - Native QML interface: sidebar navigation, Home (recently played, heavy rotation, recommendations), Browse (charts), Search (catalog and library), library Albums / Artists / Songs / Playlists / Recently Added, album, playlist and artist pages
 - Full-window Now Playing view with a blurred artwork backdrop, time-synced lyrics (click a line to seek) and Up Next
 - Queue panel, Play Next / Play Later, shuffle, repeat, volume, and seeking
@@ -30,6 +31,12 @@ A modern, native Apple Music client for Linux, built with Qt 6 / QML. It runs na
 Apple Music audio is Widevine-encrypted. The only supported way to decode it on Linux is MusicKit JS inside a Chromium engine. Kanzi keeps one invisible `WebEngineView` (`qml/PlayerHost.qml` + `resources/player.html`) whose only job is playback. Everything you see is QML, and all browsing and metadata goes straight to the Apple Music REST API from C++ (`src/applemusic.cpp`).
 
 The page loads with a `https://music.apple.com/` base URL so that the web player's developer token and CORS rules accept it.
+
+### Plex
+
+With Plex selected, the same hidden view loads `resources/plex.html` instead. It speaks the same bridge protocol as the MusicKit page, so MPRIS, the tray, the mini player, Discord and output selection work the same way. Browsing goes through `src/plex.cpp`, which converts Plex metadata into the shape the pages already use. Sign-in uses Plex's PIN flow in your browser; you can also connect to a server by address and token in Settings.
+
+Plex streams aren't encrypted, so the page plays them through two decks: songs really overlap during a crossfade, and the next song is buffered before the current one ends. Formats Chromium can't decode (ALAC, WMA, …) are transcoded to MP3 by the server. Playback is reported to the server, so it appears under Now Playing and in your listening history. Lyrics come from the server when it has them (Plex Pass, or `.lrc` files next to your music).
 
 ## Requirements
 
@@ -83,12 +90,14 @@ KANZI_DEVELOPER_TOKEN=eyJ... ./build/kanzi
 
 ```
 src/applemusic.*      REST client, developer-token bootstrap, TTML lyrics parser
-src/player.*          Playback state + command bridge to MusicKit JS
+src/player.*          Playback state + command bridge to the player page, music source switch
+src/plex.*            Plex client: PIN sign-in, server discovery, library → resource mapping, timeline
 src/mpris.*           MPRIS2 adaptors
 src/discordpresence.* Discord Rich Presence over the local IPC socket
 src/tray.*            Tray icon and window preferences
 src/audiooutput.*     Output device selection (moves our pulse streams to the chosen sink)
 resources/player.html MusicKit host page (loaded hidden)
+resources/plex.html   Plex player page: queue, two-deck crossfade, AutoMix (loaded hidden)
 qml/                  UI: Main, Theme, Nav, components/, pages/
 ```
 

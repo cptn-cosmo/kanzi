@@ -10,7 +10,8 @@ Item {
     property string status: "idle" // idle | loading | ready | none
     property string loadedFor: ""
     property bool synced: true
-    readonly property string songId: Player.nowPlaying.catalogId || ""
+    readonly property bool plex: Player.nowPlaying.source === "plex"
+    readonly property string songId: plex ? "plex:" + Player.nowPlaying.id : (Player.nowPlaying.catalogId || "")
 
     readonly property int activeIndex: {
         if (!synced)
@@ -39,6 +40,19 @@ Item {
             return
         loadedFor = songId
         lines = []
+        if (plex && Player.nowPlaying.id) {
+            status = "loading"
+            const requested = songId
+            Plex.lyrics(Player.nowPlaying.id, (res, err) => {
+                if (requested !== root.songId)
+                    return
+                const parsed = (res || []).filter(l => l.text.length > 0)
+                root.synced = parsed.some(l => l.begin >= 0)
+                root.lines = parsed
+                root.status = parsed.length ? "ready" : "none"
+            })
+            return
+        }
         if (!songId || !AppleMusic.authorized) {
             status = "none"
             return
@@ -114,7 +128,7 @@ Item {
     Text {
         anchors.centerIn: parent
         visible: root.status === "none"
-        text: AppleMusic.authorized ? qsTr("No lyrics available") : qsTr("Sign in to see lyrics")
+        text: root.plex || AppleMusic.authorized ? qsTr("No lyrics available") : qsTr("Sign in to see lyrics")
         color: Qt.rgba(1, 1, 1, 0.6)
         font.pixelSize: Theme.fontLarge
     }

@@ -12,6 +12,7 @@
 #include "mpris.h"
 #include "networkfactory.h"
 #include "player.h"
+#include "plex.h"
 #include "tray.h"
 
 static QString findWidevine()
@@ -70,6 +71,8 @@ int main(int argc, char *argv[])
 
     AppleMusic api(nullptr);
     Player player(&api);
+    Plex plex(&player, nullptr);
+    player.connectPlex(&plex);
     Mpris mpris(&player);
     AudioOutput audioOutput(nullptr);
     Tray tray(&player, nullptr);

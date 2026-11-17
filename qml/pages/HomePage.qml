@@ -27,6 +27,20 @@ ListView {
     }
 
     function load() {
+        if (Nav.plex) {
+            if (!Plex.ready)
+                return
+            pending = 1
+            error = ""
+            Plex.home((res, err) => {
+                pending--
+                if (err)
+                    error = err.message
+                else
+                    recommendations = res
+            })
+            return
+        }
         if (AppleMusic.status !== AppleMusic.Ready || !AppleMusic.authorized)
             return
         pending = 3
@@ -54,8 +68,12 @@ ListView {
     Component.onCompleted: load()
     Connections {
         target: AppleMusic
-        function onStatusChanged() { root.load() }
-        function onStorefrontChanged() { root.load() }
+        function onStatusChanged() { if (!Nav.plex) root.load() }
+        function onStorefrontChanged() { if (!Nav.plex) root.load() }
+    }
+    Connections {
+        target: Plex
+        function onStatusChanged() { if (Nav.plex) root.load() }
     }
 
     model: shelves
@@ -73,17 +91,24 @@ ListView {
             Layout.fillWidth: true
             Layout.bottomMargin: 24
             title: root.greeting()
-            subtitle: qsTr("Made for you, from Apple Music")
+            subtitle: Nav.plex ? (Plex.serverName ? qsTr("From %1 on Plex").arg(Plex.serverName) : qsTr("From your Plex server"))
+                               : qsTr("Made for you, from Apple Music")
         }
         Spinner {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 60
-            running: root.pending > 0 && root.shelves.length === 0
+            running: (root.pending > 0 || (Nav.plex && Plex.status === Plex.Connecting)) && root.shelves.length === 0
         }
         Text {
             Layout.leftMargin: Theme.gutter
-            visible: root.error !== "" && root.shelves.length === 0
-            text: qsTr("Couldn't load your recommendations: %1").arg(root.error)
+            Layout.rightMargin: Theme.gutter
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            readonly property bool plexDown: Nav.plex && Plex.status === Plex.Error
+            visible: (root.error !== "" || plexDown) && root.shelves.length === 0
+            text: plexDown ? Plex.errorString
+                : Nav.plex ? qsTr("Couldn't load your library: %1").arg(root.error)
+                : qsTr("Couldn't load your recommendations: %1").arg(root.error)
             color: Theme.textDim
         }
     }

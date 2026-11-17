@@ -3,7 +3,8 @@ import QtWebEngine
 import QtWebChannel
 import Kanzi
 
-// Invisible host for the MusicKit JS page that does the actual (DRM) audio decoding.
+// Invisible host for the page that does the actual audio decoding: MusicKit JS for
+// Apple Music (DRM), or plex.html for Plex.
 Item {
     id: root
 
@@ -55,8 +56,10 @@ Item {
     }
 
     function reload() {
-        if (AppleMusic.developerToken)
-            view.loadHtml(Player.playerHtml(), "https://music.apple.com/")
+        if (Player.canLoad())
+            view.loadHtml(Player.playerHtml(), Player.playerBaseUrl())
+        else
+            view.loadHtml("<!doctype html><html></html>") // stop whatever the old page was playing
     }
 
     Connections {

@@ -294,7 +294,8 @@ void DiscordPresence::pushActivity()
 
         QJsonObject assets;
         const QString art = AppleMusic::instance()->artworkUrl(np.value(QStringLiteral("artwork")), 512);
-        if (art.startsWith(u"https://"))
+        const bool plex = np.value(QStringLiteral("source")).toString() == QLatin1String("plex");
+        if (art.startsWith(u"https://") && !plex) // Plex artwork URLs carry the server token
             assets.insert(QStringLiteral("large_image"), art);
         if (!album.isEmpty())
             assets.insert(QStringLiteral("large_text"), clamp(album));

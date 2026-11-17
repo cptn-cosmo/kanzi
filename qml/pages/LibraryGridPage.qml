@@ -9,13 +9,23 @@ ColumnLayout {
 
     property string kind: "albums"
     property var items: []
-    property string next: ""
+    property var next: ""   // Apple: next page's path; Plex: next offset
     property bool loading: false
 
     readonly property string title: ({ albums: qsTr("Albums"), artists: qsTr("Artists"), playlists: qsTr("Playlists") })[kind]
 
     function fetch(path) {
         loading = true
+        if (Nav.plex) {
+            Plex.browse(kind, path || 0, (res, err) => {
+                loading = false
+                if (err)
+                    return Nav.toast(err.message)
+                items = items.concat(res.data || [])
+                next = res.next > 0 ? res.next : ""
+            })
+            return
+        }
         const query = { limit: 100 }
         if (kind === "artists")
             query.include = "catalog"
@@ -28,7 +38,7 @@ ColumnLayout {
         })
     }
 
-    Component.onCompleted: fetch(`/v1/me/library/${kind}`)
+    Component.onCompleted: fetch(Nav.plex ? 0 : `/v1/me/library/${kind}`)
 
     PageHeader {
         Layout.fillWidth: true
