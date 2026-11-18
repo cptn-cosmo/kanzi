@@ -3,7 +3,7 @@
 A modern, native Apple Music and Plex client for Linux, built with Qt 6 / QML. It runs natively on Wayland.
 
 - Two music sources: Apple Music, or the music libraries on your Plex Media Server. Switch between them from the menu at the bottom of the sidebar or in Settings
-- Native QML interface: sidebar navigation, Home (recently played, heavy rotation, recommendations), Browse (charts), Search (catalog and library), library Albums / Artists / Songs / Playlists / Recently Added, album, playlist and artist pages
+- Native QML interface: sidebar navigation (collapsible to icons only with Ctrl+B), Home (recently played, heavy rotation, recommendations), Browse (charts), Search (catalog and library), library Albums / Artists / Songs / Playlists / Recently Added, album, playlist and artist pages
 - Full-window Now Playing view with a blurred artwork backdrop, time-synced lyrics (click a line to seek) and Up Next
 - Queue panel, Play Next / Play Later, shuffle, repeat, volume, and seeking
 - Mini player (Ctrl+M): a frameless, resizable artwork window with controls that you can keep on top
@@ -82,6 +82,7 @@ KANZI_DEVELOPER_TOKEN=eyJ... ./build/kanzi
 | Ctrl+← / Ctrl+→ | Previous / next |
 | Ctrl+↑ / Ctrl+↓ | Volume |
 | Ctrl+F, Ctrl+L | Search |
+| Ctrl+B | Collapse / expand the sidebar |
 | Ctrl+M | Mini player (double-click or Esc to return) |
 | Esc, Alt+← | Close overlay / go back |
 | Shift+wheel | Scroll a shelf sideways |

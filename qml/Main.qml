@@ -104,8 +104,8 @@ ApplicationWindow {
             spacing: 0
 
             Sidebar {
+                id: sidebar
                 Layout.fillHeight: true
-                Layout.preferredWidth: 252
             }
 
             Rectangle {
@@ -240,6 +240,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Up"; onActivated: Player.volume = Math.min(1, Player.volume + 0.05) }
     Shortcut { sequence: "Ctrl+Down"; onActivated: Player.volume = Math.max(0, Player.volume - 0.05) }
     Shortcut { sequences: [StandardKey.Find, "Ctrl+L"]; onActivated: Nav.focusSearch() }
+    Shortcut { sequence: "Ctrl+B"; onActivated: sidebar.collapsed = !sidebar.collapsed }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.quit() }
     Shortcut { sequence: "Ctrl+M"; onActivated: Nav.miniPlayerOpen = true }
     Shortcut { sequences: [StandardKey.Back, "Alt+Left"]; onActivated: Nav.back() }

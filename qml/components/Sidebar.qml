@@ -1,3 +1,4 @@
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -6,8 +7,31 @@ import Kanzi
 Rectangle {
     id: root
     color: Theme.sidebar
+    clip: true
 
     property var playlists: []
+
+    // Collapsed shows icons only. Focusing search (click or Ctrl+F) widens it again
+    // until the search field loses focus. Icons keep the same x in both modes, so
+    // only the labels move while the width animates.
+    property bool collapsed: false
+    readonly property bool compact: collapsed && !search.activeFocus
+    implicitWidth: compact ? 64 : 252
+    Behavior on implicitWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+    Settings {
+        category: "sidebar"
+        property alias collapsed: root.collapsed
+    }
+
+    // Leaving the search page drops the temporary expansion.
+    Connections {
+        target: Nav.stack
+        function onCurrentItemChanged() {
+            if (root.collapsed && (Nav.section !== "search" || Nav.stack.depth > 1))
+                search.focus = false
+        }
+    }
 
     function loadPlaylists() {
         if (Nav.plex) {
@@ -73,21 +97,60 @@ Rectangle {
 
         // ---- brand ----
         RowLayout {
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
+            Layout.fillWidth: true
+            Layout.leftMargin: 17
+            Layout.rightMargin: 12
             spacing: 10
-            Image {
-                source: "qrc:/qt/qml/Kanzi/resources/kanzi.svg"
-                sourceSize: Qt.size(30, 30)
+            // When collapsed, hovering the logo turns it into the expand button.
+            AbstractButton {
+                id: logo
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
+                hoverEnabled: true
+                focusPolicy: Qt.NoFocus
+                enabled: root.collapsed
+                readonly property bool showExpand: root.compact && hovered
+                onClicked: root.collapsed = false
+                ToolTip.visible: showExpand
+                ToolTip.text: qsTr("Expand sidebar (Ctrl+B)")
+                ToolTip.delay: 300
+                background: Rectangle {
+                    radius: Theme.radiusSmall
+                    color: logo.showExpand ? (logo.pressed ? Theme.pressed : Theme.hover) : "transparent"
+                }
+                contentItem: Item {
+                    Image {
+                        anchors.fill: parent
+                        visible: !logo.showExpand
+                        source: "qrc:/qt/qml/Kanzi/resources/kanzi.svg"
+                        sourceSize: Qt.size(30, 30)
+                    }
+                    Icon {
+                        anchors.centerIn: parent
+                        visible: logo.showExpand
+                        name: "menu"
+                        size: 19
+                        color: Theme.textDim
+                    }
+                }
             }
             Text {
+                Layout.fillWidth: true
+                visible: !root.compact
                 text: "Kanzi"
                 color: Theme.text
                 font.pixelSize: 22
                 font.weight: Font.Bold
                 font.letterSpacing: -0.4
+                elide: Text.ElideRight
+            }
+            IconButton {
+                visible: !root.compact
+                iconName: "menuOpen"
+                iconSize: 17
+                color: Theme.textDim
+                tip: qsTr("Collapse sidebar (Ctrl+B)")
+                onClicked: { root.collapsed = true; search.focus = false }
             }
         }
 
@@ -99,7 +162,10 @@ Rectangle {
             Layout.rightMargin: 14
             Layout.topMargin: 18
             Layout.bottomMargin: 10
-            placeholderText: qsTr("Search")
+            placeholderText: root.compact ? "" : qsTr("Search")
+            ToolTip.visible: root.compact && hovered
+            ToolTip.text: qsTr("Search")
+            ToolTip.delay: 300
             leftPadding: 34
             color: Theme.text
             selectByMouse: true
@@ -149,11 +215,22 @@ Rectangle {
                 width: parent.width
                 spacing: 1
 
+                // Collapsed, the label keeps its space but shows a short divider instead.
                 component SectionLabel: Text {
                     Layout.leftMargin: 24
                     Layout.topMargin: 18
                     Layout.bottomMargin: 6
-                    color: Theme.textFaint
+                    // Inline components can't see `root`; the sidebar's width tells us instead.
+                    readonly property bool compact: !!parent && parent.width < 100
+                    color: compact ? "transparent" : Theme.textFaint
+                    Rectangle {
+                        visible: parent.compact && parent.visible
+                        x: -2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        height: 1
+                        color: Theme.border
+                    }
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     font.letterSpacing: 0.6
@@ -201,10 +278,12 @@ Rectangle {
             implicitHeight: 1
             color: Theme.border
         }
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
             Layout.margins: 12
-            spacing: 8
+            columns: root.compact ? 1 : 4
+            rowSpacing: 4
+            columnSpacing: 8
 
             // Status + source switcher: click to choose Apple Music or Plex.
             AbstractButton {
@@ -216,7 +295,9 @@ Rectangle {
                 onClicked: sourceMenu.popup(sourceButton, 0, -sourceMenu.implicitHeight - 4)
                 ToolTip.visible: hovered
                 ToolTip.delay: 600
-                ToolTip.text: Nav.plex && Plex.status === Plex.Error ? Plex.errorString : qsTr("Switch between Apple Music and Plex")
+                ToolTip.text: Nav.plex && Plex.status === Plex.Error ? Plex.errorString
+                            : root.compact ? root.statusText
+                            : qsTr("Switch between Apple Music and Plex")
 
                 background: Rectangle {
                     radius: Theme.radiusSmall
@@ -225,7 +306,8 @@ Rectangle {
                 contentItem: RowLayout {
                     spacing: 8
                     Rectangle {
-                        Layout.leftMargin: 6
+                        Layout.leftMargin: root.compact ? 0 : 6
+                        Layout.alignment: root.compact ? Qt.AlignHCenter : Qt.AlignLeft
                         implicitWidth: 8
                         implicitHeight: 8
                         radius: 4
@@ -233,6 +315,7 @@ Rectangle {
                     }
                     Text {
                         Layout.fillWidth: true
+                        visible: !root.compact
                         text: root.statusText
                         color: Theme.textDim
                         font.pixelSize: Theme.fontSmall
@@ -240,6 +323,7 @@ Rectangle {
                     }
                     Icon {
                         Layout.rightMargin: 4
+                        visible: !root.compact
                         name: "swap"
                         size: 15
                         color: Theme.textFaint
@@ -263,6 +347,7 @@ Rectangle {
                 }
             }
             IconButton {
+                Layout.alignment: Qt.AlignHCenter
                 iconName: "settings"
                 iconSize: 17
                 tip: qsTr("Settings")
@@ -270,6 +355,7 @@ Rectangle {
                 onClicked: Nav.show("settings")
             }
             IconButton {
+                Layout.alignment: Qt.AlignHCenter
                 visible: !Nav.plex
                 iconName: AppleMusic.authorized ? "logout" : "artist"
                 iconSize: 16
@@ -278,6 +364,7 @@ Rectangle {
                 onClicked: AppleMusic.authorized ? AppleMusic.signOut() : Player.authorize()
             }
             IconButton {
+                Layout.alignment: Qt.AlignHCenter
                 visible: Nav.plex
                 iconName: Plex.signedIn ? "logout" : "artist"
                 iconSize: 16
