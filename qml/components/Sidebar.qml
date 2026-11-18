@@ -246,7 +246,6 @@ Rectangle {
                 SectionLabel { text: Nav.plex ? qsTr("Plex") : qsTr("Apple Music") }
                 NavItem { text: Nav.plex && !Nav.signedIn ? qsTr("Connect") : qsTr("Home"); iconName: "home"; key: Nav.signedIn ? "home" : "welcome"; visible: Nav.signedIn || Nav.plex }
                 NavItem { text: qsTr("Browse"); iconName: "browse"; key: "browse"; visible: !Nav.plex }
-                NavItem { text: qsTr("Search"); iconName: "search"; key: "search"; visible: !Nav.plex || Nav.signedIn }
 
                 SectionLabel { text: qsTr("Library"); visible: Nav.signedIn }
                 NavItem { text: qsTr("Recently Added"); iconName: "recent"; key: "recent"; visible: Nav.signedIn }
