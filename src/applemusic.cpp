@@ -20,6 +20,10 @@ namespace {
 
 const QString kApiBase = QStringLiteral("https://api.music.apple.com");
 const QString kWebOrigin = QStringLiteral("https://music.apple.com");
+// The Apple Music web player's developer token (issued 2026-11-05, expires 2027-01-14).
+// Once it expires Kanzi pulls the current one from the web bundle instead.
+const QString kBuiltInDeveloperToken = QStringLiteral(
+    "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6IldlYlBsYXlLaWQifQ.eyJpc3MiOiJBTVBXZWJQbGF5IiwiaWF0IjoxNzkzOTAwNzA4LCJleHAiOjE3OTk5NDg3MDgsInJvb3RfaHR0cHNfb3JpZ2luIjpbImFwcGxlLmNvbSJdfQ.7L-PYJHjO8PpFdhKS-OSkf_snyFvg5cq-JDERUs_N_UcUX9Vk0kf1WLatgDeEvhB_Arg1b5Tl-99G1v6hUwH0A");
 const QByteArray kUserAgent =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
@@ -147,45 +151,34 @@ void AppleMusic::setStatus(Status s, const QString &error)
 
 void AppleMusic::retry()
 {
+    // Something went wrong with the current token, so fetch a fresh one.
+    m_skipBuiltInToken = true;
     QSettings().remove(QStringLiteral("auth/developerToken"));
     loadDeveloperToken();
-}
-
-void AppleMusic::setDeveloperTokenOverride(const QString &token)
-{
-    QSettings settings;
-    if (token.trimmed().isEmpty())
-        settings.remove(QStringLiteral("developerTokenOverride"));
-    else
-        settings.setValue(QStringLiteral("developerTokenOverride"), token.trimmed());
-    loadDeveloperToken();
-}
-
-QString AppleMusic::developerTokenOverride() const
-{
-    return QSettings().value(QStringLiteral("developerTokenOverride")).toString();
 }
 
 void AppleMusic::loadDeveloperToken()
 {
     setStatus(Loading);
 
-    // 1. Explicit override, e.g. a token minted from your own MusicKit key.
+    // 1. Development override, e.g. a token minted from your own MusicKit key.
     const QString env = qEnvironmentVariable("KANZI_DEVELOPER_TOKEN");
     if (!env.isEmpty())
         return acceptDeveloperToken(env, false);
 
     QSettings settings;
-    const QString configured = settings.value(QStringLiteral("developerTokenOverride")).toString();
-    if (!configured.isEmpty())
-        return acceptDeveloperToken(configured, false);
+    settings.remove(QStringLiteral("developerTokenOverride")); // no longer a setting
 
-    // 2. A previously scraped token that hasn't expired yet.
+    // 2. The built-in token, while it's valid.
+    if (!m_skipBuiltInToken && tokenUsable(kBuiltInDeveloperToken))
+        return acceptDeveloperToken(kBuiltInDeveloperToken, false);
+
+    // 3. A previously scraped token that hasn't expired yet.
     const QString cached = settings.value(QStringLiteral("auth/developerToken")).toString();
     if (tokenUsable(cached))
         return acceptDeveloperToken(cached, false);
 
-    // 3. Pull the token the Apple Music web player ships with.
+    // 4. Pull the token the Apple Music web player currently ships with.
     scrapeDeveloperToken();
 }
 

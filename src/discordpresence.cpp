@@ -17,9 +17,8 @@
 namespace {
 
 const QString kEnabled = QStringLiteral("discord/enabled");
-const QString kClientId = QStringLiteral("discord/clientId");
 const QString kShowPaused = QStringLiteral("discord/showWhenPaused");
-// Kanzi's own Discord application; can be overridden in Settings or KANZI_DISCORD_CLIENT_ID.
+// Kanzi's own Discord application (KANZI_DISCORD_CLIENT_ID overrides it for development).
 const QString kDefaultClientId = QStringLiteral("1571594211579404319");
 
 // Discord rejects strings shorter than 2 or longer than 128 characters.
@@ -70,9 +69,8 @@ DiscordPresence::DiscordPresence(Player *player, QObject *parent)
     QSettings settings;
     m_enabled = settings.value(kEnabled, true).toBool();
     m_showWhenPaused = settings.value(kShowPaused, false).toBool();
-    m_clientId = qEnvironmentVariable("KANZI_DISCORD_CLIENT_ID", settings.value(kClientId).toString());
-    if (m_clientId.isEmpty())
-        m_clientId = kDefaultClientId;
+    m_clientId = qEnvironmentVariable("KANZI_DISCORD_CLIENT_ID", kDefaultClientId);
+    settings.remove(QStringLiteral("discord/clientId")); // no longer a setting
 
     m_retry.setInterval(15000);
     connect(&m_retry, &QTimer::timeout, this, &DiscordPresence::tryConnect);
@@ -112,17 +110,6 @@ void DiscordPresence::setEnabled(bool on)
         return;
     m_enabled = on;
     QSettings().setValue(kEnabled, on);
-    emit settingsChanged();
-    reconnect();
-}
-
-void DiscordPresence::setClientId(const QString &id)
-{
-    const QString trimmed = id.trimmed().isEmpty() ? kDefaultClientId : id.trimmed();
-    if (trimmed == m_clientId)
-        return;
-    m_clientId = trimmed;
-    QSettings().setValue(kClientId, trimmed);
     emit settingsChanged();
     reconnect();
 }

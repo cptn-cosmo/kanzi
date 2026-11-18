@@ -9,7 +9,7 @@ A modern, native Apple Music and Plex client for Linux, built with Qt 6 / QML. I
 - Mini player (Ctrl+M): a frameless, resizable artwork window with controls that you can keep on top
 - System tray icon with playback menu, close-to-tray and start-in-tray
 - Crossfade (0–12 s) and AutoMix, which ends songs early once they fade into silence
-- Discord Rich Presence ("Listening to …" with cover art, progress and a link). Uses Kanzi's own Discord application by default; you can paste a different ID in Settings
+- Discord Rich Presence ("Listening to …" with cover art, progress and a link). Uses Kanzi's own Discord application
 - MPRIS2 (`org.mpris.MediaPlayer2.kanzi`): media keys, desktop media widgets and lock screen controls
 - Choose the audio output device in Settings (PulseAudio/PipeWire). It switches live, no restart needed
 - Follows the system light or dark colour scheme
@@ -67,11 +67,10 @@ sudo cmake --install build
 
 ## Developer token
 
-By default Kanzi takes the public developer token from the music.apple.com web bundle and caches it until it expires. To use a token minted from your own MusicKit key instead, do either of these:
+Kanzi ships with the Apple Music web player's public developer token. Once that token expires, Kanzi takes the current one from the music.apple.com web bundle and caches it until it expires too. To use a token minted from your own MusicKit key instead:
 
 ```sh
 KANZI_DEVELOPER_TOKEN=eyJ... ./build/kanzi
-# or paste it in Settings → Advanced → Developer token
 ```
 
 ## Keyboard

@@ -281,7 +281,7 @@ Rectangle {
         GridLayout {
             Layout.fillWidth: true
             Layout.margins: 12
-            columns: root.compact ? 1 : 4
+            columns: root.compact ? 1 : 2
             rowSpacing: 4
             columnSpacing: 8
 
@@ -353,23 +353,6 @@ Rectangle {
                 tip: qsTr("Settings")
                 active: Nav.section === "settings"
                 onClicked: Nav.show("settings")
-            }
-            IconButton {
-                Layout.alignment: Qt.AlignHCenter
-                visible: !Nav.plex
-                iconName: AppleMusic.authorized ? "logout" : "artist"
-                iconSize: 16
-                tip: AppleMusic.authorized ? qsTr("Sign out") : qsTr("Sign in")
-                enabled: Player.ready
-                onClicked: AppleMusic.authorized ? AppleMusic.signOut() : Player.authorize()
-            }
-            IconButton {
-                Layout.alignment: Qt.AlignHCenter
-                visible: Nav.plex
-                iconName: Plex.signedIn ? "logout" : "artist"
-                iconSize: 16
-                tip: Plex.signedIn ? qsTr("Sign out of Plex") : qsTr("Sign in to Plex")
-                onClicked: Plex.signedIn ? Plex.signOut() : Plex.signIn()
             }
         }
     }

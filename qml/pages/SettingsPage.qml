@@ -96,6 +96,23 @@ Flickable {
             }
         }
 
+        // ---- account ----
+        Card {
+            title: qsTr("Apple Music account")
+
+            Row_ {
+                label: AppleMusic.authorized ? qsTr("Signed in to Apple Music") : qsTr("Not signed in")
+                hint: AppleMusic.authorized ? qsTr("Storefront: %1 · Language: %2").arg(AppleMusic.storefront.toUpperCase()).arg(AppleMusic.language)
+                                            : qsTr("Sign in to play full songs and see your library.")
+                PillButton {
+                    text: AppleMusic.authorized ? qsTr("Sign out") : qsTr("Sign in")
+                    primary: !AppleMusic.authorized
+                    enabled: Player.ready
+                    onClicked: AppleMusic.authorized ? AppleMusic.signOut() : Player.authorize()
+                }
+            }
+        }
+
         // ---- plex ----
         Card {
             title: qsTr("Plex")
@@ -288,38 +305,6 @@ Flickable {
                     onToggled: DiscordPresence.showWhenPaused = checked
                 }
             }
-            Row_ {
-                label: qsTr("Discord application ID")
-                hint: qsTr("Kanzi's own application is used by default. To show a different name after “Listening to”, paste the ID of your own app from discord.com/developers/applications. Clear the field to go back to the default.")
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                TextField {
-                    id: discordId
-                    Layout.fillWidth: true
-                    enabled: DiscordPresence.enabled
-                    text: DiscordPresence.clientId
-                    placeholderText: qsTr("e.g. 1234567890123456789")
-                    inputMethodHints: Qt.ImhDigitsOnly
-                    validator: RegularExpressionValidator { regularExpression: /[0-9]{0,24}/ }
-                    color: Theme.text
-                    selectByMouse: true
-                    onAccepted: DiscordPresence.clientId = text
-                    background: Rectangle {
-                        radius: Theme.radiusSmall
-                        color: Theme.hover
-                        border.width: discordId.activeFocus ? 2 : 0
-                        border.color: Theme.accent
-                    }
-                }
-                PillButton {
-                    text: qsTr("Save")
-                    primary: false
-                    enabled: DiscordPresence.enabled && discordId.text !== DiscordPresence.clientId
-                    onClicked: DiscordPresence.clientId = discordId.text
-                }
-            }
         }
 
         // ---- window ----
@@ -362,69 +347,6 @@ Flickable {
                 Toggle {
                     checked: Tray.miniPlayerOnTop
                     onToggled: Tray.miniPlayerOnTop = checked
-                }
-            }
-        }
-
-        // ---- account ----
-        Card {
-            title: qsTr("Apple Music account")
-
-            Row_ {
-                label: AppleMusic.authorized ? qsTr("Signed in to Apple Music") : qsTr("Not signed in")
-                hint: AppleMusic.authorized ? qsTr("Storefront: %1 · Language: %2").arg(AppleMusic.storefront.toUpperCase()).arg(AppleMusic.language)
-                                            : qsTr("Sign in to play full songs and see your library.")
-                PillButton {
-                    text: AppleMusic.authorized ? qsTr("Sign out") : qsTr("Sign in")
-                    primary: !AppleMusic.authorized
-                    enabled: Player.ready
-                    onClicked: AppleMusic.authorized ? AppleMusic.signOut() : Player.authorize()
-                }
-            }
-        }
-
-        // ---- advanced ----
-        Card {
-            title: qsTr("Advanced")
-
-            Row_ {
-                label: qsTr("Developer token")
-                hint: AppleMusic.status === AppleMusic.Error ? AppleMusic.errorString
-                    : AppleMusic.status === AppleMusic.Loading ? qsTr("Fetching…")
-                    : tokenField.text ? qsTr("Using your own token.")
-                    : qsTr("Using the token from the Apple Music web player. Paste a MusicKit JWT to use your own.")
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                TextField {
-                    id: tokenField
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("eyJ… (leave empty for automatic)")
-                    text: AppleMusic.developerTokenOverride()
-                    echoMode: activeFocus ? TextInput.Normal : TextInput.Password
-                    color: Theme.text
-                    selectByMouse: true
-                    background: Rectangle {
-                        radius: Theme.radiusSmall
-                        color: Theme.hover
-                        border.width: tokenField.activeFocus ? 2 : 0
-                        border.color: Theme.accent
-                    }
-                }
-                PillButton {
-                    text: qsTr("Apply")
-                    primary: false
-                    onClicked: {
-                        AppleMusic.setDeveloperTokenOverride(tokenField.text)
-                        Nav.toast(qsTr("Developer token updated"))
-                    }
-                }
-                PillButton {
-                    text: qsTr("Refresh")
-                    primary: false
-                    visible: tokenField.text === ""
-                    onClicked: AppleMusic.retry()
                 }
             }
         }

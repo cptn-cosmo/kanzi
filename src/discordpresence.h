@@ -19,7 +19,6 @@ class DiscordPresence : public QObject
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY settingsChanged)
     // Application ID from https://discord.com/developers/applications; its name is
     // what Discord shows after "Listening to".
-    Q_PROPERTY(QString clientId READ clientId WRITE setClientId NOTIFY settingsChanged)
     Q_PROPERTY(bool showWhenPaused READ showWhenPaused WRITE setShowWhenPaused NOTIFY settingsChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY statusChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -31,12 +30,10 @@ public:
     static DiscordPresence *create(QQmlEngine *, QJSEngine *);
 
     bool enabled() const { return m_enabled; }
-    QString clientId() const { return m_clientId; }
     bool showWhenPaused() const { return m_showWhenPaused; }
     bool connected() const { return m_ready; }
     QString status() const { return m_status; }
     void setEnabled(bool on);
-    void setClientId(const QString &id);
     void setShowWhenPaused(bool on);
 
 signals:

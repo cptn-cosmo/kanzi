@@ -60,9 +60,6 @@ public:
     Q_INVOKABLE QVariantList parseTtml(const QString &ttml) const;
 
     Q_INVOKABLE void retry();
-    // Use a specific developer token instead of the scraped one; "" restores the default.
-    Q_INVOKABLE void setDeveloperTokenOverride(const QString &token);
-    Q_INVOKABLE QString developerTokenOverride() const;
     Q_INVOKABLE void signOut();
     Q_INVOKABLE void copyToClipboard(const QString &text) const;
 
@@ -92,6 +89,7 @@ private:
     Status m_status = Loading;
     QString m_error;
     QString m_developerToken;
+    bool m_skipBuiltInToken = false;
     QString m_userToken;
     QString m_storefront = QStringLiteral("us");
     QString m_language = QStringLiteral("en-US");
