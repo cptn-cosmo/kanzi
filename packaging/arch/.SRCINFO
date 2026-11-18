@@ -1,6 +1,6 @@
 pkgbase = kanzi
 	pkgdesc = Modern, native Qt 6 / Wayland Apple Music and Plex client
-	pkgver = 0.5.0
+	pkgver = 0.5.1
 	pkgrel = 1
 	url = https://github.com/cptn-cosmo/kanzi
 	arch = x86_64
@@ -20,7 +20,7 @@ pkgbase = kanzi
 	depends = qt6-webengine
 	optdepends = widevine: Widevine CDM required for playback (AUR)
 	optdepends = google-chrome: alternative source of the Widevine CDM (AUR)
-	source = kanzi-0.5.0.tar.gz::https://github.com/cptn-cosmo/kanzi/archive/refs/tags/v0.5.0.tar.gz
-	sha256sums = 43a088e83a41e756e922ca037b0c49f473deb299c544019793b440e37ad6d39a
+	source = kanzi-0.5.1.tar.gz::https://github.com/cptn-cosmo/kanzi/archive/refs/tags/v0.5.1.tar.gz
+	sha256sums = c534fa287af398f7ba4693a2c62082ebbc7f0146a6478e05c06d7adc065c0836
 
 pkgname = kanzi
