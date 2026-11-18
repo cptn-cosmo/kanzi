@@ -217,6 +217,10 @@ Rectangle {
 
                 // Collapsed, the label keeps its space but shows a short divider instead.
                 component SectionLabel: Text {
+                    // Fill + elide so a hidden label can't widen the column when collapsed;
+                    // otherwise the nav items stretch past their right margin.
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                     Layout.leftMargin: 24
                     Layout.topMargin: 18
                     Layout.bottomMargin: 6
