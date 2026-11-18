@@ -26,7 +26,7 @@ optdepends=(
   'google-chrome: alternative source of the Widevine CDM (AUR)'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('ffb2ae65063c75cb216b933617de86930c3f4a3e66a0df74a2f31ea0f1b71a16')
+sha256sums=('43a088e83a41e756e922ca037b0c49f473deb299c544019793b440e37ad6d39a')
 
 build() {
   cmake -S "$pkgname-$pkgver" -B build -G Ninja \
