@@ -4,12 +4,46 @@
 #include "player.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QMimeDatabase>
+#include <QNetworkReply>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QUrlQuery>
 
 namespace {
 const QString kPath = QStringLiteral("/org/mpris/MediaPlayer2");
 const QString kPlayerIface = QStringLiteral("org.mpris.MediaPlayer2.Player");
+const int kArtSize = 600;
+const int kArtCacheMax = 200; // files kept in the cover cache
+
+QString artCacheDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/mpris-art");
+}
+
+// Cache key: the URL without credentials, so a rotated Plex token doesn't refetch every cover.
+QString artCacheKey(const QString &remote)
+{
+    QUrl url(remote);
+    QUrlQuery query(url);
+    query.removeAllQueryItems(QStringLiteral("X-Plex-Token"));
+    url.setQuery(query);
+    return QString::fromLatin1(QCryptographicHash::hash(url.toEncoded(), QCryptographicHash::Sha1).toHex());
+}
+
+// An already cached cover for this key, whatever image type it was saved as.
+QString findCachedArt(const QString &key)
+{
+    const QFileInfoList hits = QDir(artCacheDir()).entryInfoList({key + QStringLiteral(".*")}, QDir::Files);
+    return hits.isEmpty() ? QString() : hits.first().absoluteFilePath();
+}
 }
 
 Mpris::Mpris(Player *player, QObject *parent)
@@ -34,6 +68,7 @@ Mpris::Mpris(Player *player, QObject *parent)
                                      {QStringLiteral("CanSeek"), adaptor->canPlay()}});
     });
     connect(player, &Player::nowPlayingChanged, this, [this, adaptor] {
+        updateArt();
         notifyChanged(kPlayerIface, {{QStringLiteral("Metadata"), adaptor->metadata()}});
     });
     connect(player, &Player::queueChanged, this, [this, adaptor] {
@@ -50,6 +85,63 @@ Mpris::Mpris(Player *player, QObject *parent)
     connect(player, &Player::seeked, adaptor, [adaptor](double pos) {
         emit adaptor->Seeked(qlonglong(pos * 1e6));
     });
+}
+
+void Mpris::updateArt()
+{
+    const QString remote =
+        AppleMusic::instance()->artworkUrl(m_player->nowPlaying().value(QStringLiteral("artwork")), kArtSize);
+    if (remote == m_artRemote)
+        return;
+    m_artRemote = remote;
+    m_artLocal.clear();
+    if (m_artReply)
+        m_artReply->abort();
+    if (remote.isEmpty())
+        return;
+
+    const QString key = artCacheKey(remote);
+    const QString cached = findCachedArt(key);
+    if (!cached.isEmpty()) {
+        QFile f(cached); // mark as recently used so pruning keeps it
+        if (f.open(QIODevice::ReadWrite))
+            f.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+        m_artLocal = QUrl::fromLocalFile(cached);
+        return;
+    }
+    if (!QUrl(remote).scheme().startsWith(u"http"))
+        return;
+
+    QNetworkReply *reply = m_nam.get(QNetworkRequest(QUrl(remote)));
+    m_artReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, remote, key] {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError || remote != m_artRemote)
+            return;
+        const QByteArray data = reply->readAll();
+        const QMimeType mime = QMimeDatabase().mimeTypeForData(data);
+        if (!mime.name().startsWith(u"image/"))
+            return;
+        QDir().mkpath(artCacheDir());
+        const QString path = artCacheDir() + u'/' + key + u'.' + mime.preferredSuffix();
+        QSaveFile file(path);
+        if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
+            return;
+        m_artLocal = QUrl::fromLocalFile(path);
+        pruneArtCache();
+        auto *adaptor = findChild<MprisPlayer *>();
+        if (adaptor)
+            notifyChanged(kPlayerIface, {{QStringLiteral("Metadata"), adaptor->metadata()}});
+    });
+}
+
+void Mpris::pruneArtCache()
+{
+    const QFileInfoList files = QDir(artCacheDir()).entryInfoList(QDir::Files, QDir::Time); // newest first
+    for (qsizetype i = kArtCacheMax; i < files.size(); ++i) {
+        if (QUrl::fromLocalFile(files[i].absoluteFilePath()) != m_artLocal)
+            QFile::remove(files[i].absoluteFilePath());
+    }
 }
 
 void Mpris::notifyChanged(const QString &interface, const QVariantMap &changed)
@@ -158,9 +250,9 @@ QVariantMap MprisPlayer::metadata() const
     md.insert(QStringLiteral("xesam:title"), np.value(QStringLiteral("title")).toString());
     md.insert(QStringLiteral("xesam:album"), np.value(QStringLiteral("album")).toString());
     md.insert(QStringLiteral("xesam:artist"), QStringList{np.value(QStringLiteral("artist")).toString()});
-    const QString art = AppleMusic::instance()->artworkUrl(np.value(QStringLiteral("artwork")), 600);
+    const QUrl art = m_mpris->artUrl();
     if (!art.isEmpty())
-        md.insert(QStringLiteral("mpris:artUrl"), art);
+        md.insert(QStringLiteral("mpris:artUrl"), art.toString());
     return md;
 }
 

@@ -2,8 +2,13 @@
 
 #include <QDBusAbstractAdaptor>
 #include <QDBusObjectPath>
+#include <QNetworkAccessManager>
 #include <QObject>
+#include <QPointer>
+#include <QUrl>
 #include <QVariantMap>
+
+class QNetworkReply;
 
 class Player;
 
@@ -17,8 +22,19 @@ public:
     Player *player() const { return m_player; }
     void notifyChanged(const QString &interface, const QVariantMap &changed);
 
+    // Local copy of the current track's cover (file://), empty until it is cached. Remote art
+    // URLs are never published: shells may not fetch them, and Plex ones carry the account token.
+    QUrl artUrl() const { return m_artLocal; }
+
 private:
+    void updateArt();
+    void pruneArtCache();
+
     Player *m_player;
+    QNetworkAccessManager m_nam;
+    QPointer<QNetworkReply> m_artReply;
+    QString m_artRemote;
+    QUrl m_artLocal;
 };
 
 class MprisRoot : public QDBusAbstractAdaptor
