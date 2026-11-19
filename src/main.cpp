@@ -46,6 +46,16 @@ int main(int argc, char *argv[])
     if (!widevine.isEmpty())
         flags += " --widevine-path=" + QFile::encodeName(widevine);
     flags += " --autoplay-policy=no-user-gesture-required";
+    // Chromium registers its own MPRIS player (org.mpris.MediaPlayer2.chromium.*) for the hidden
+    // playback page, which shows "Kanzi Plex Player" with no artist and competes with ours in
+    // shell media widgets. Kanzi's own MPRIS service (mpris.cpp) is the only one we want.
+    // Chromium honours only the last --disable-features, so merge into an existing one.
+    const QByteArray disable = "--disable-features=";
+    const qsizetype at = flags.lastIndexOf(disable);
+    if (at >= 0)
+        flags.insert(at + disable.size(), "HardwareMediaKeyHandling,");
+    else
+        flags += " " + disable + "HardwareMediaKeyHandling";
     qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags.trimmed());
     // KANZI_DEVTOOLS=1 exposes the player and sign-in pages at http://localhost:9222
     if (qEnvironmentVariableIsSet("KANZI_DEVTOOLS") && qEnvironmentVariableIsEmpty("QTWEBENGINE_REMOTE_DEBUGGING"))
