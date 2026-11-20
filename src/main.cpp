@@ -11,6 +11,7 @@
 #include "discordpresence.h"
 #include "mpris.h"
 #include "networkfactory.h"
+#include "notifications.h"
 #include "player.h"
 #include "plex.h"
 #include "tray.h"
@@ -87,6 +88,7 @@ int main(int argc, char *argv[])
     AudioOutput audioOutput(nullptr);
     Tray tray(&player, nullptr);
     DiscordPresence discord(&player, nullptr);
+    Notifications notifications(&player, &mpris, nullptr);
 
     QQmlApplicationEngine engine;
     engine.setNetworkAccessManagerFactory(new CachingNetworkFactory);

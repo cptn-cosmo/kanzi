@@ -129,6 +129,7 @@ void Mpris::updateArt()
             return;
         m_artLocal = QUrl::fromLocalFile(path);
         pruneArtCache();
+        emit artChanged();
         auto *adaptor = findChild<MprisPlayer *>();
         if (adaptor)
             notifyChanged(kPlayerIface, {{QStringLiteral("Metadata"), adaptor->metadata()}});

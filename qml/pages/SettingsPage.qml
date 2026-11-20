@@ -307,6 +307,29 @@ Flickable {
             }
         }
 
+        // ---- notifications ----
+        Card {
+            title: qsTr("Notifications")
+
+            Row_ {
+                label: qsTr("Show a notification when the track changes")
+                hint: Notifications.available ? qsTr("Uses your desktop's notifications, with the cover art.")
+                                              : qsTr("No notification service found on this desktop.")
+                Toggle {
+                    checked: Notifications.enabled
+                    onToggled: Notifications.enabled = checked
+                }
+            }
+            Row_ {
+                label: qsTr("Also notify while Kanzi is focused")
+                Toggle {
+                    enabled: Notifications.enabled
+                    checked: Notifications.whenFocused
+                    onToggled: Notifications.whenFocused = checked
+                }
+            }
+        }
+
         // ---- window ----
         Card {
             title: qsTr("Window")

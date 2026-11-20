@@ -26,6 +26,10 @@ public:
     // URLs are never published: shells may not fetch them, and Plex ones carry the account token.
     QUrl artUrl() const { return m_artLocal; }
 
+signals:
+    // The current track's cover finished caching (artUrl() is now set).
+    void artChanged();
+
 private:
     void updateArt();
     void pruneArtCache();

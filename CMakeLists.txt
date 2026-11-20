@@ -27,6 +27,7 @@ qt_add_executable(kanzi
     src/audiooutput.h src/audiooutput.cpp
     src/tray.h src/tray.cpp
     src/discordpresence.h src/discordpresence.cpp
+    src/notifications.h src/notifications.cpp
     src/windowshadow.h src/windowshadow.cpp
 )
 
